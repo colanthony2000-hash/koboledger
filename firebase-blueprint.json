@@ -1,0 +1,177 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role-based access control and workspace assignment",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 512 },
+        "role": { "type": "string", "enum": ["head", "member", "guest"] },
+        "workspaceId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "workspaceId"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "Financial ledger account representing a bank account or cash wallet",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["bank", "cash", "savings"] },
+        "currency": { "type": "string", "maxLength": 10 },
+        "opening_balance_minor": { "type": "integer" },
+        "owner_user_id": { "type": "string", "maxLength": 128 },
+        "visibility": { "type": "string", "enum": ["shared", "private"] },
+        "is_active": { "type": "boolean" },
+        "account_number_mask": { "type": "string", "maxLength": 30 },
+        "institution": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "name", "type", "currency", "owner_user_id", "visibility"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Double-entry transaction header with balanced posting lines",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "workspace_id": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["expense", "income", "transfer", "debt_drawdown", "debt_repayment", "opening_balance"] },
+        "description": { "type": "string", "maxLength": 256 },
+        "amount_minor": { "type": "integer" },
+        "currency": { "type": "string", "maxLength": 10 },
+        "effective_date": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "enum": ["posted", "reversed"] },
+        "owner_user_id": { "type": "string", "maxLength": 128 },
+        "visibility": { "type": "string", "enum": ["shared", "private"] },
+        "account_id": { "type": "string", "maxLength": 128 },
+        "category_id": { "type": "string", "maxLength": 128 },
+        "replaces_id": { "type": "string", "maxLength": 128 },
+        "reversal_of_id": { "type": "string", "maxLength": 128 },
+        "revision_group_id": { "type": "string", "maxLength": 128 },
+        "project_id": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "type", "description", "amount_minor", "currency", "effective_date", "status", "owner_user_id", "visibility"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Income or expense ledger classification category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["expense", "income"] },
+        "is_essential": { "type": "boolean" },
+        "color": { "type": "string", "maxLength": 30 }
+      },
+      "required": ["id", "name", "type"]
+    },
+    "Debt": {
+      "title": "Debt",
+      "description": "Debt portfolio record supporting D-1, D-2, D-3, D-4 amortization models",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "creditor": { "type": "string", "maxLength": 128 },
+        "term_type": { "type": "string", "enum": ["D-1_interest_free", "D-2_reducing_balance", "D-3_flat_rate", "D-4_daily_rate"] },
+        "principal_minor": { "type": "integer" },
+        "monthly_rate_pct": { "type": "number" },
+        "tenure_months": { "type": "integer" },
+        "start_date": { "type": "string", "maxLength": 30 },
+        "urgency_flag": { "type": "string", "enum": ["high", "medium", "low"] },
+        "liability_node_id": { "type": "string", "maxLength": 128 },
+        "owner_user_id": { "type": "string", "maxLength": 128 },
+        "visibility": { "type": "string", "enum": ["shared", "private"] },
+        "notes": { "type": "string", "maxLength": 512 }
+      },
+      "required": ["id", "name", "creditor", "term_type", "principal_minor", "owner_user_id", "visibility"]
+    },
+    "Budget": {
+      "title": "Budget",
+      "description": "Monthly budget limit with threshold deduplication tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "period": { "type": "string", "maxLength": 30 },
+        "category_id": { "type": "string", "maxLength": 128 },
+        "limit_minor": { "type": "integer" },
+        "limit_version": { "type": "integer" },
+        "exclude_project_spending": { "type": "boolean" }
+      },
+      "required": ["id", "period", "category_id", "limit_minor"]
+    },
+    "SavingsGoal": {
+      "title": "SavingsGoal",
+      "description": "Virtual vault savings earmark within an existing account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "target_amount_minor": { "type": "integer" },
+        "target_date": { "type": "string", "maxLength": 30 },
+        "access_mode": { "type": "string", "enum": ["flexible", "protected", "locked"] },
+        "is_locked": { "type": "boolean" },
+        "linked_account_id": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "name", "target_amount_minor", "access_mode", "linked_account_id"]
+    },
+    "Commitment": {
+      "title": "Commitment",
+      "description": "Approved obligation deducting from True Spendable Balance prior to posting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 128 },
+        "due_date": { "type": "string", "maxLength": 30 },
+        "amount_minor": { "type": "integer" },
+        "status": { "type": "string", "enum": ["pending", "approved", "paid", "cancelled"] },
+        "source_type": { "type": "string", "enum": ["recurring_bill", "loan_payment", "project_item", "manual_obligation"] },
+        "account_id": { "type": "string", "maxLength": 128 },
+        "category_id": { "type": "string", "maxLength": 128 },
+        "owner_user_id": { "type": "string", "maxLength": 128 },
+        "linked_transaction_id": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "title", "amount_minor", "status", "source_type", "owner_user_id"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "UserProfile" },
+      "description": "User profile documents keyed by Firebase Auth UID"
+    },
+    "/accounts/{accountId}": {
+      "schema": { "$ref": "Account" },
+      "description": "Financial accounts and wallets"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "Transaction" },
+      "description": "Double-entry ledger transactions"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "Category" },
+      "description": "Income and expense categories"
+    },
+    "/debts/{debtId}": {
+      "schema": { "$ref": "Debt" },
+      "description": "Household debt and loan registers"
+    },
+    "/budgets/{budgetId}": {
+      "schema": { "$ref": "Budget" },
+      "description": "Monthly category budget limits"
+    },
+    "/savings_goals/{goalId}": {
+      "schema": { "$ref": "SavingsGoal" },
+      "description": "Virtual vault savings earmarks"
+    },
+    "/commitments/{commitmentId}": {
+      "schema": { "$ref": "Commitment" },
+      "description": "Approved expenditure obligations"
+    }
+  }
+}

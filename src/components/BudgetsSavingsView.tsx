@@ -15,6 +15,10 @@ import {
   CheckCircle,
   Clock,
   Sparkles,
+  X,
+  Sliders,
+  Wallet,
+  Crown,
 } from 'lucide-react';
 
 export const BudgetsSavingsView: React.FC = () => {
@@ -32,6 +36,8 @@ export const BudgetsSavingsView: React.FC = () => {
     postGoalContribution,
     withdrawGoalFunds,
     toggleGoalLock,
+    subscription,
+    openSubscriptionModal,
   } = useFinance();
 
   const [activeTab, setActiveTab] = useState<'budgets' | 'savings'>('budgets');
@@ -123,50 +129,59 @@ export const BudgetsSavingsView: React.FC = () => {
       {/* View Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Budgets & Virtual Savings Earmarks
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+            <span>Budgets & Virtual Earmarks</span>
+            <span className="text-xs font-mono font-medium px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              {activeTab === 'budgets' ? `${budgets.length} Active Budgets` : `${savingsGoals.length} Savings Vaults`}
+            </span>
           </h1>
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
             <span>Blueprint Sections 2 & 6</span>
             <span aria-hidden="true">·</span>
-            <span>Threshold Deduplication (T-04)</span>
+            <span>Deduplicated 4-Threshold Alerts (T-04)</span>
             <span aria-hidden="true">·</span>
-            <span>Virtual Earmarks (T-08)</span>
+            <span>Zero-Movement Earmarks (INV-03, T-08)</span>
           </div>
         </div>
 
         {activeTab === 'budgets' ? (
           <button
             onClick={() => setIsAddBudgetOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm cursor-pointer transition-colors self-start sm:self-auto"
+            className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl shadow-lg shadow-emerald-600/20 cursor-pointer transition-all self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
-            <span>Create Budget</span>
+            <span>Create Category Budget</span>
           </button>
         ) : null}
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 text-xs font-medium">
+      <div className="flex items-center gap-2 border-b border-slate-200/80 dark:border-white/10 text-xs font-semibold">
         <button
           onClick={() => setActiveTab('budgets')}
-          className={`pb-2.5 px-3 transition-colors cursor-pointer ${
+          className={`pb-3 px-4 transition-all cursor-pointer relative ${
             activeTab === 'budgets'
-              ? 'border-b-2 border-emerald-600 text-emerald-700 dark:text-emerald-400 font-semibold'
-              : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+              ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          Budgets & Alerts ({budgets.length})
+          <span>Category Budgets & Alerts ({budgets.length})</span>
+          {activeTab === 'budgets' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
+          )}
         </button>
         <button
           onClick={() => setActiveTab('savings')}
-          className={`pb-2.5 px-3 transition-colors cursor-pointer ${
+          className={`pb-3 px-4 transition-all cursor-pointer relative ${
             activeTab === 'savings'
-              ? 'border-b-2 border-emerald-600 text-emerald-700 dark:text-emerald-400 font-semibold'
-              : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+              ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          Savings Goals & Earmarks ({savingsGoals.length})
+          <span>Savings Goals & Vault Earmarks ({savingsGoals.length})</span>
+          {activeTab === 'savings' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
+          )}
         </button>
       </div>
 
@@ -175,20 +190,20 @@ export const BudgetsSavingsView: React.FC = () => {
         <div className="space-y-6">
           {/* Deduplicated Alerts Log (T-04) */}
           {budgetAlerts.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xs">
+            <div className="bg-white dark:bg-[#0E131F] rounded-2xl border border-amber-500/30 p-5 space-y-3 shadow-sm bg-gradient-to-r from-amber-500/[0.03] to-transparent">
               <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  <span>Deduplicated Budget Alerts Register (T-04)</span>
+                <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span>Deduplicated Budget Warning Stream (T-04 Verified)</span>
                 </div>
-                <span className="text-slate-500 text-[11px]">
-                  Key: budgetId + period + threshold + limitVersion
+                <span className="text-slate-400 font-mono text-[10px]">
+                  ID: budgetId + period + threshold + limitVersion
                 </span>
               </div>
-              <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+              <div className="divide-y divide-slate-100 dark:divide-white/5 text-xs">
                 {budgetAlerts.map((a) => (
-                  <div key={a.id} className="py-2 flex items-center justify-between text-slate-700 dark:text-slate-300">
-                    <span>{a.message}</span>
+                  <div key={a.id} className="py-2.5 flex items-center justify-between text-slate-700 dark:text-slate-300">
+                    <span className="font-medium">{a.message}</span>
                     <span className="font-mono text-[10px] text-slate-400 shrink-0 ml-4">
                       {a.timestamp.slice(11, 19)}
                     </span>
@@ -199,7 +214,7 @@ export const BudgetsSavingsView: React.FC = () => {
           )}
 
           {/* Budgets Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {budgetSpendMap.map(({ budget, spendMinor, usagePct, isOverspent }) => {
               const cat = categories.find((c) => c.id === budget.category_id);
               const remainingMinor = budget.limit_minor - spendMinor;
@@ -207,66 +222,68 @@ export const BudgetsSavingsView: React.FC = () => {
               return (
                 <div
                   key={budget.id}
-                  className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4"
+                  className="bg-white dark:bg-[#0E131F] rounded-2xl border border-slate-200/80 dark:border-white/10 p-5.5 shadow-sm space-y-4 hover:border-emerald-500/40 transition-all"
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">
                         {budget.name}
                       </h3>
-                      <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                        <span>Category: {cat?.name}</span>
+                      <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                        <span>Category: <strong className="text-slate-700 dark:text-slate-200">{cat?.name}</strong></span>
                         {cat?.is_essential && (
                           <>
                             <span aria-hidden="true">·</span>
-                            <span className="text-emerald-600 font-medium">Essential Living</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Essential</span>
                           </>
                         )}
                         {budget.exclude_project_spending && (
                           <>
                             <span aria-hidden="true">·</span>
-                            <span className="text-purple-600 font-medium">Excludes Project Tags</span>
+                            <span className="text-purple-600 dark:text-purple-400 font-semibold">Excludes Projects</span>
                           </>
                         )}
                       </div>
                     </div>
                     {isOverspent && (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                         Overspent (T-06)
                       </span>
                     )}
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className="space-y-1.5">
+                  {/* Progress Bar with 50/75/90/100 markers */}
+                  <div className="space-y-2">
                     <div className="flex justify-between text-xs font-mono">
-                      <span>Spent: <strong>{formatMinor(spendMinor)}</strong></span>
-                      <span>Limit: <strong>{formatMinor(budget.limit_minor)}</strong></span>
+                      <span className="text-slate-500">Spent: <strong className="text-slate-900 dark:text-white">{formatMinor(spendMinor)}</strong></span>
+                      <span className="text-slate-500">Limit: <strong className="text-slate-900 dark:text-white">{formatMinor(budget.limit_minor)}</strong></span>
                     </div>
-                    <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    
+                    <div className="relative w-full h-3 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden p-0.5">
                       <div
-                        className={`h-full transition-all duration-300 ${
+                        className={`h-full rounded-full transition-all duration-500 ${
                           isOverspent
-                            ? 'bg-rose-500'
+                            ? 'bg-gradient-to-r from-rose-500 to-rose-600'
                             : usagePct >= 90
-                            ? 'bg-amber-500'
-                            : 'bg-emerald-500'
+                            ? 'bg-gradient-to-r from-amber-500 to-amber-600'
+                            : 'bg-gradient-to-r from-emerald-500 to-teal-500'
                         }`}
                         style={{ width: `${Math.min(100, usagePct)}%` }}
                       />
                     </div>
-                    <div className="flex justify-between text-[11px] text-slate-500">
+
+                    <div className="flex justify-between items-center text-[11px] text-slate-400 font-mono">
                       <span>{Math.round(usagePct)}% utilized</span>
                       <span>
                         {remainingMinor >= 0
-                          ? `${formatMinor(remainingMinor)} remaining`
+                          ? `${formatMinor(remainingMinor)} left`
                           : `Overspent by ${formatMinor(Math.abs(remainingMinor))}`}
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                    <span className="text-slate-500 text-[11px]">
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-white/5 text-xs">
+                    <span className="text-slate-400 text-[11px]">
                       Thresholds: 50% · 75% · 90% · 100%
                     </span>
                     <button
@@ -279,9 +296,10 @@ export const BudgetsSavingsView: React.FC = () => {
                           updateBudgetLimit(budget.id, Math.round(parseFloat(newLimit) * 100));
                         }
                       }}
-                      className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline cursor-pointer"
+                      className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
                     >
-                      Adjust Limit (v{budget.limit_version})
+                      <Sliders className="w-3.5 h-3.5" />
+                      <span>Adjust Limit (v{budget.limit_version})</span>
                     </button>
                   </div>
                 </div>
@@ -293,19 +311,19 @@ export const BudgetsSavingsView: React.FC = () => {
 
       {/* TAB 2: SAVINGS GOALS & ACCESS MODES */}
       {activeTab === 'savings' && (
-        <div className="space-y-5">
+        <div className="space-y-6">
           {/* Section 2 Architectural Note */}
-          <div className="p-4 rounded-xl border border-sky-200 bg-sky-50/70 dark:border-sky-900/50 dark:bg-sky-950/20 text-xs space-y-1">
-            <div className="flex items-center gap-2 font-semibold text-sky-900 dark:text-sky-200">
+          <div className="p-4.5 rounded-2xl border border-sky-500/20 bg-sky-500/5 dark:bg-sky-500/10 text-xs space-y-1">
+            <div className="flex items-center gap-2 font-bold text-sky-800 dark:text-sky-300">
               <Sparkles className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-              <span>Section 2 Invariant: Savings Goals are NOT Posting Lines (INV-03, T-08)</span>
+              <span>Section 2 Invariant: Savings Goals are NOT Separate Bank Accounts (INV-03, T-08)</span>
             </div>
             <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-              Goal balances are held as <strong>virtual earmarks</strong> inside your real accounts. Earmarking funds moves zero cash and touches no posting lines. It increases Reserved balance and decreases Spendable balance without counting as an expense.
+              Goal balances are held as <strong>virtual earmarks</strong> inside your real bank and cash accounts. Earmarking funds moves zero cash and creates no posting lines. It increases Reserved balance and decreases Spendable balance without counting as an expense.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {savingsGoals.map((goal) => {
               const alloc = goalAllocations.find((a) => a.goal_id === goal.id);
               const currentBalanceMinor = alloc?.allocated_minor || 0;
@@ -315,78 +333,78 @@ export const BudgetsSavingsView: React.FC = () => {
               return (
                 <div
                   key={goal.id}
-                  className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4"
+                  className="bg-white dark:bg-[#0E131F] rounded-2xl border border-slate-200/80 dark:border-white/10 p-5.5 shadow-sm space-y-4 hover:border-emerald-500/40 transition-all"
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">
                         {goal.name}
                       </h3>
-                      <div className="text-xs text-slate-500 mt-0.5">
+                      <div className="text-xs text-slate-400 mt-0.5 font-mono">
                         Target Date: {goal.target_date}
                       </div>
                     </div>
 
                     {/* Access Mode Badge (Section 2, T-10) */}
-                    <div className="flex items-center gap-1.5 text-xs">
+                    <div>
                       {goal.access_mode === 'locked' ? (
                         <button
                           onClick={() => toggleGoalLock(goal.id)}
-                          className={`flex items-center gap-1 px-2 py-0.5 rounded font-semibold cursor-pointer transition-colors ${
+                          className={`flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full cursor-pointer transition-all ${
                             goal.is_locked
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300'
-                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                           }`}
-                          title="Click to deliberately lock/unlock (T-10)"
+                          title="Click to deliberately toggle lock (T-10)"
                         >
                           {goal.is_locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
                           <span>{goal.is_locked ? 'Locked' : 'Unlocked'}</span>
                         </button>
                       ) : goal.access_mode === 'protected' ? (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300">
+                        <span className="flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                           <Shield className="w-3 h-3" />
                           <span>Protected</span>
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300">
                           Flexible
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-850 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
-                    <span>Virtual Earmark inside: <strong>{linkedAcc?.name || 'Account'}</strong></span>
+                  <div className="text-xs text-slate-500 bg-slate-50 dark:bg-white/[0.02] p-3 rounded-xl border border-slate-100 dark:border-white/5">
+                    <span>Virtual Earmark inside: <strong className="text-slate-900 dark:text-white">{linkedAcc?.name || 'Account'}</strong></span>
                   </div>
 
                   {/* Progress */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <div className="flex justify-between text-xs font-mono">
-                      <span>Saved: <strong className="text-emerald-600 dark:text-emerald-400">{formatMinor(currentBalanceMinor)}</strong></span>
-                      <span>Target: <strong>{formatMinor(goal.target_amount_minor)}</strong></span>
+                      <span className="text-slate-500">Saved: <strong className="text-emerald-600 dark:text-emerald-400">{formatMinor(currentBalanceMinor)}</strong></span>
+                      <span className="text-slate-500">Target: <strong className="text-slate-900 dark:text-white">{formatMinor(goal.target_amount_minor)}</strong></span>
                     </div>
-                    <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="w-full h-3 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden p-0.5">
                       <div
-                        className="h-full bg-emerald-500 transition-all duration-300"
+                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
                         style={{ width: `${progressPct}%` }}
                       />
                     </div>
-                    <div className="text-[11px] text-slate-500 text-right">
+                    <div className="text-[11px] font-mono text-slate-400 text-right">
                       {progressPct}% completed
                     </div>
                   </div>
 
                   {/* Actions */}
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                  <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 dark:border-white/5 text-xs">
                     <button
                       onClick={() => handleOpenGoalModal(goal, 'contribute')}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md font-semibold cursor-pointer transition-colors text-center"
+                      className="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-bold cursor-pointer transition-all text-center shadow-xs"
                     >
                       + Earmark Funds
                     </button>
                     <button
                       onClick={() => handleOpenGoalModal(goal, 'withdraw')}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-750 dark:text-slate-200 rounded-md font-semibold cursor-pointer transition-colors text-center"
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-200 rounded-xl font-semibold cursor-pointer transition-all text-center"
                     >
                       Withdraw (T-10)
                     </button>
@@ -400,26 +418,34 @@ export const BudgetsSavingsView: React.FC = () => {
 
       {/* CONTRIBUTE / WITHDRAW MODAL (T-08, T-09, T-10) */}
       {selectedGoal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-xl space-y-4">
-            <div className="border-b border-slate-200 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                {modalMode === 'contribute' ? 'Earmark Savings Funds' : 'Withdraw From Savings Earmark'}
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Goal: {selectedGoal.name} ({selectedGoal.access_mode} access mode)
-              </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-white dark:bg-[#0E131F] rounded-2xl border border-slate-200 dark:border-white/10 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {modalMode === 'contribute' ? 'Earmark Savings Funds' : 'Withdraw From Savings Earmark'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Goal: {selectedGoal.name} ({selectedGoal.access_mode} mode)
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedGoal(null)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             {actionError && (
-              <div className="p-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-200 text-xs">
+              <div className="p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300 text-xs">
                 {actionError}
               </div>
             )}
 
             <form onSubmit={handleExecuteGoalAction} className="space-y-4 text-xs">
               <div>
-                <label className="font-medium text-slate-700 dark:text-slate-300 block mb-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
                   Amount in Naira (₦)
                 </label>
                 <input
@@ -427,7 +453,7 @@ export const BudgetsSavingsView: React.FC = () => {
                   step="any"
                   value={actionAmountNaira || ''}
                   onChange={(e) => setActionAmountNaira(parseFloat(e.target.value) || 0)}
-                  className="w-full p-2 font-mono tabular-nums rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  className="w-full p-2.5 font-mono font-bold tabular-nums rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#131926] text-slate-900 dark:text-white"
                   required
                 />
               </div>
@@ -435,34 +461,34 @@ export const BudgetsSavingsView: React.FC = () => {
               {/* Mandatory Reason for Protected Goals (T-10) */}
               {modalMode === 'withdraw' && selectedGoal.access_mode === 'protected' && (
                 <div>
-                  <label className="font-medium text-slate-700 dark:text-slate-300 block mb-1">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
                     Mandatory Stated Reason (Protected Goal Rule T-10)
                   </label>
                   <input
                     type="text"
                     value={withdrawalReason}
                     onChange={(e) => setWithdrawalReason(e.target.value)}
-                    placeholder="e.g. Urgent car brake repair, hospital bill"
-                    className="w-full p-2 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    placeholder="e.g. Urgent car brake repair, emergency hospital bill"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#131926] text-slate-900 dark:text-white"
                     required
                   />
                   <span className="text-[11px] text-slate-500 mt-1 block">
-                    Reason is recorded in the immutable audit log and updates target forecast.
+                    Reason is recorded in the immutable audit log and adjusts forecast.
                   </span>
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-white/5">
                 <button
                   type="button"
                   onClick={() => setSelectedGoal(null)}
-                  className="px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 rounded-lg cursor-pointer"
+                  className="px-5 py-2.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm cursor-pointer"
+                  className="px-6 py-2.5 font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl shadow-lg shadow-emerald-600/20 cursor-pointer"
                 >
                   {modalMode === 'contribute' ? 'Confirm Earmark (T-08)' : 'Confirm Withdrawal (T-10)'}
                 </button>
@@ -474,20 +500,28 @@ export const BudgetsSavingsView: React.FC = () => {
 
       {/* CREATE BUDGET MODAL */}
       {isAddBudgetOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-xl space-y-4">
-            <div className="border-b border-slate-200 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                Create Category Budget
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Configure monthly limits with automatic threshold alerts.
-              </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-white dark:bg-[#0E131F] rounded-2xl border border-slate-200 dark:border-white/10 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Create Category Budget
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Configure monthly spending limit with 4-tier threshold alerts.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsAddBudgetOpen(false)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <form onSubmit={handleCreateBudget} className="space-y-4 text-xs">
               <div>
-                <label className="font-medium text-slate-700 dark:text-slate-300 block mb-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
                   Budget Label (Optional)
                 </label>
                 <input
@@ -495,18 +529,18 @@ export const BudgetsSavingsView: React.FC = () => {
                   value={newBudgetName}
                   onChange={(e) => setNewBudgetName(e.target.value)}
                   placeholder="e.g. Fuel & Commute Monthly Cap"
-                  className="w-full p-2 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#131926] text-slate-900 dark:text-white"
                 />
               </div>
 
               <div>
-                <label className="font-medium text-slate-700 dark:text-slate-300 block mb-1">
-                  Category
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  Expense Category
                 </label>
                 <select
                   value={newBudgetCategory}
                   onChange={(e) => setNewBudgetCategory(e.target.value)}
-                  className="w-full p-2 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#131926] text-slate-900 dark:text-white font-medium"
                   required
                 >
                   <option value="">Select Category</option>
@@ -514,22 +548,22 @@ export const BudgetsSavingsView: React.FC = () => {
                     .filter((c) => c.type === 'expense')
                     .map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name} {c.is_essential ? '(Essential)' : ''}
+                        {c.name} {c.is_essential ? '(Essential Living)' : ''}
                       </option>
                     ))}
                 </select>
               </div>
 
               <div>
-                <label className="font-medium text-slate-700 dark:text-slate-300 block mb-1">
-                  Monthly Limit (₦)
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  Monthly Limit (₦ NGN)
                 </label>
                 <input
                   type="number"
                   step="any"
                   value={newBudgetLimitNaira || ''}
                   onChange={(e) => setNewBudgetLimitNaira(parseFloat(e.target.value) || 0)}
-                  className="w-full p-2 font-mono tabular-nums rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  className="w-full p-2.5 font-mono font-bold tabular-nums rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#131926] text-slate-900 dark:text-white"
                   required
                 />
               </div>
@@ -547,17 +581,17 @@ export const BudgetsSavingsView: React.FC = () => {
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-white/5">
                 <button
                   type="button"
                   onClick={() => setIsAddBudgetOpen(false)}
-                  className="px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 rounded-lg cursor-pointer"
+                  className="px-5 py-2.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm cursor-pointer"
+                  className="px-6 py-2.5 font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl shadow-lg shadow-emerald-600/20 cursor-pointer"
                 >
                   Save Budget
                 </button>

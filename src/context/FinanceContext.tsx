@@ -20,6 +20,7 @@ import {
   StatementReconciliation,
   Transaction,
   UserProfile,
+  UserSubscription,
 } from '../types/finance';
 import {
   buildPostingLinesForTemplate,
@@ -27,6 +28,24 @@ import {
   executeTransactionEdit,
   validateTransactionBalance,
 } from '../services/ledgerEngine';
+import {
+  auth,
+  loginWithGoogle,
+  logoutUser,
+  testConnection,
+} from '../services/firebase';
+import {
+  persistTransaction,
+  persistAccount,
+  persistDebt,
+  persistBudget,
+  persistSavingsGoal,
+  persistCommitment,
+  persistUserProfile,
+  seedInitialFirestoreData,
+  listenToTransactions,
+} from '../services/firebaseSync';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 // Seed Users for Household Sharing (Section 5, T-21)
 export const SEED_USERS: UserProfile[] = [
@@ -1037,6 +1056,20 @@ interface FinanceContextType {
   projects: Project[];
   projectItems: ProjectItem[];
   auditLogs: AuditLog[];
+  // Subscription & Commercial Tier
+  subscription: UserSubscription;
+  updateSubscription: (sub: Partial<UserSubscription>) => void;
+  isFeatureAllowed: (feature: 'unlimited_accounts' | 'debt_reducing_engine' | 'four_tier_alerts' | 'cloud_sync' | 'christmas_planner' | 'vault_earmarks') => boolean;
+  isSubscriptionModalOpen: boolean;
+  openSubscriptionModal: (featureReason?: string) => void;
+  closeSubscriptionModal: () => void;
+  requestedFeature: string | undefined;
+  // Firebase Auth & Live Sync State (Phase 1)
+  firebaseUser: FirebaseUser | null;
+  isFirebaseConnected: boolean;
+  isSyncing: boolean;
+  signInGoogle: () => Promise<void>;
+  signOutGoogle: () => Promise<void>;
   // Actions
   postTransaction: (tx: Omit<Transaction, 'id' | 'created_at' | 'status' | 'posting_lines'>, postingLines?: any[]) => void;
   editTransaction: (originalTx: Transaction, updated: any) => void;
@@ -1124,6 +1157,128 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       },
     ];
   });
+
+  // Subscription State & Commercial Monetization
+  const [subscription, setSubscription] = useState<UserSubscription>(() => {
+    const saved = localStorage.getItem('kl_subscription');
+    return saved
+      ? JSON.parse(saved)
+      : {
+          tier: 'free',
+          status: 'free',
+        };
+  });
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+  const [requestedFeature, setRequestedFeature] = useState<string | undefined>(undefined);
+
+  const openSubscriptionModal = (featureReason?: string) => {
+    setRequestedFeature(featureReason);
+    setIsSubscriptionModalOpen(true);
+  };
+
+  const closeSubscriptionModal = () => {
+    setIsSubscriptionModalOpen(false);
+    setRequestedFeature(undefined);
+  };
+
+  const updateSubscription = (sub: Partial<UserSubscription>) => {
+    setSubscription((prev) => {
+      const updated = { ...prev, ...sub } as UserSubscription;
+      localStorage.setItem('kl_subscription', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const isFeatureAllowed = (
+    feature: 'unlimited_accounts' | 'debt_reducing_engine' | 'four_tier_alerts' | 'cloud_sync' | 'christmas_planner' | 'vault_earmarks'
+  ): boolean => {
+    if (subscription.tier === 'pro' && subscription.status === 'active') {
+      return true;
+    }
+    return false;
+  };
+
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Connection & Auth subscription (Phase 1)
+  useEffect(() => {
+    testConnection().then((connected) => {
+      setIsFirebaseConnected(connected);
+    });
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
+      if (user) {
+        const initials = user.displayName
+          ? user.displayName
+              .split(' ')
+              .map((n) => n[0])
+              .join('')
+              .toUpperCase()
+              .slice(0, 2)
+          : 'US';
+
+        const updatedProfile: UserProfile = {
+          id: user.uid,
+          name: user.displayName || user.email || 'Authenticated User',
+          role: 'owner',
+          avatar_initials: initials,
+          email: user.email || undefined,
+          photoURL: user.photoURL || undefined,
+        };
+        setCurrentUser(updatedProfile);
+
+        persistUserProfile(updatedProfile).catch((err) =>
+          console.warn('Could not persist user profile to Firestore:', err)
+        );
+
+        seedInitialFirestoreData({
+          accounts,
+          transactions,
+          debts,
+          budgets,
+          savingsGoals,
+          commitments,
+        }).catch((err) => console.warn('Firestore initial seed skipped:', err));
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Real-time Firestore transaction sync
+  useEffect(() => {
+    if (!firebaseUser) return;
+    setIsSyncing(true);
+    const unsub = listenToTransactions((remoteTxs) => {
+      setIsSyncing(false);
+      if (remoteTxs && remoteTxs.length > 0) {
+        setTransactions(remoteTxs);
+      }
+    });
+    return () => unsub();
+  }, [firebaseUser]);
+
+  const signInGoogle = async () => {
+    try {
+      await loginWithGoogle();
+    } catch (e) {
+      console.error('Google Sign-In failed:', e);
+      throw e;
+    }
+  };
+
+  const signOutGoogle = async () => {
+    try {
+      await logoutUser();
+      setCurrentUser(SEED_USERS[0]);
+    } catch (e) {
+      console.error('Sign-Out failed:', e);
+      throw e;
+    }
+  };
 
   // Save changes to localStorage
   useEffect(() => {
@@ -1251,6 +1406,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setTransactions((prev) => [newTx, ...prev]);
 
+    // Persist to Firestore
+    persistTransaction(newTx).catch((e) =>
+      console.warn('Firestore transaction persist skipped:', e)
+    );
+
     setAuditLogs((prev) => [
       {
         id: `audit_${Date.now()}`,
@@ -1280,6 +1440,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const filtered = prev.filter((t) => t.id !== originalTx.id);
       return [replacementTx, reversalTx, { ...originalTx, status: 'reversed' }, ...filtered];
     });
+
+    // Persist immutable revisions to Firestore
+    persistTransaction(reversalTx).catch((e) =>
+      console.warn('Firestore reversal persist skipped:', e)
+    );
+    persistTransaction(replacementTx).catch((e) =>
+      console.warn('Firestore replacement persist skipped:', e)
+    );
 
     setAuditLogs((prev) => [...newLogs, ...prev]);
   };
@@ -1694,6 +1862,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         projects,
         projectItems,
         auditLogs,
+        subscription,
+        updateSubscription,
+        isFeatureAllowed,
+        isSubscriptionModalOpen,
+        openSubscriptionModal,
+        closeSubscriptionModal,
+        requestedFeature,
+        firebaseUser,
+        isFirebaseConnected,
+        isSyncing,
+        signInGoogle,
+        signOutGoogle,
         postTransaction,
         editTransaction,
         postGoalContribution,

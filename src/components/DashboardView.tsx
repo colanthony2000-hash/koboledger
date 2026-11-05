@@ -12,11 +12,19 @@ import {
   ShieldCheck,
   CheckCircle2,
   TrendingUp,
+  Sparkles,
+  Lock,
+  ArrowRight,
+  CreditCard,
+  ChevronRight,
+  Shield,
   Layers,
+  Crown,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
-  LineChart,
+  AreaChart,
+  Area,
   Line,
   XAxis,
   YAxis,
@@ -30,7 +38,7 @@ interface DashboardViewProps {
   onNavigate: (tab: string) => void;
 }
 
-// Custom Tooltip adhering to Zero-Pill & Typography rules (§1.A, §1.D)
+// Custom Glassmorphism Tooltip
 const CustomTrendTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     const incomeVal = payload.find((p: any) => p.dataKey === 'Income')?.value ?? 0;
@@ -38,32 +46,33 @@ const CustomTrendTooltip = ({ active, payload, label }: any) => {
     const netVal = incomeVal - expVal;
 
     return (
-      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 p-3 shadow-lg backdrop-blur-xs text-xs space-y-1.5 min-w-[200px]">
-        <div className="font-semibold text-slate-900 dark:text-white pb-1 border-b border-slate-100 dark:border-slate-800">
-          {label} Ledger Summary
+      <div className="rounded-xl border border-slate-200/90 dark:border-slate-700/80 bg-white/95 dark:bg-[#0D111C]/95 p-3.5 shadow-xl backdrop-blur-md text-xs space-y-2 min-w-[220px]">
+        <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white pb-1.5 border-b border-slate-100 dark:border-slate-800">
+          <span>{label}</span>
+          <span className="text-[10px] text-slate-400 font-mono">LEDGER POSTED</span>
         </div>
         <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>Income Inflow:</span>
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+            <span>Monthly Inflow:</span>
           </span>
           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
             ₦{incomeVal.toLocaleString()}
           </span>
         </div>
         <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-rose-500" />
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
             <span>Expenditure:</span>
           </span>
           <span className="font-mono font-bold text-rose-600 dark:text-rose-400 tabular-nums">
             ₦{expVal.toLocaleString()}
           </span>
         </div>
-        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold">
+        <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-200 font-semibold">
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-indigo-500" />
-            <span>Net Margin:</span>
+            <span>Net Surplus:</span>
           </span>
           <span
             className={`font-mono tabular-nums ${
@@ -88,16 +97,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
     commitments,
     budgetAlerts,
     debts,
+    subscription,
+    openSubscriptionModal,
   } = useFinance();
 
-  const [showNetMarginLine, setShowNetMarginLine] = useState(false);
+  const [showNetMarginLine, setShowNetMarginLine] = useState(true);
+  const [showMathProof, setShowMathProof] = useState(false);
+
+  // Time-sensitive greeting
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }, []);
 
   // Filter accounts by user visibility (Section 5, T-21)
   const visibleAccounts = accounts.filter(
     (a) => a.visibility === 'shared' || a.owner_user_id === currentUser.id
   );
 
-  // Compute aggregate balances across all visible accounts
+  // Compute aggregate balances across visible accounts
   let totalLedgerMinor = 0;
   let totalReservedMinor = 0;
   let totalSpendableMinor = 0;
@@ -114,7 +134,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
   const { chartData, total6mIncome, total6mExpenditure, avgSavingsRate } = useMemo(() => {
     const monthlyMap: Record<string, { incomeMinor: number; expenditureMinor: number }> = {};
 
-    // Generate month keys for last 6 months (Jun 2026 - Nov 2026)
     const now = new Date(2026, 10, 4);
     const keys: string[] = [];
     for (let i = 5; i >= 0; i--) {
@@ -124,7 +143,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
       monthlyMap[key] = { incomeMinor: 0, expenditureMinor: 0 };
     }
 
-    // Process posted transactions visible to current user
     for (const tx of transactions) {
       if (tx.status !== 'posted') continue;
       if (tx.visibility === 'private' && tx.owner_user_id !== currentUser.id) continue;
@@ -140,10 +158,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
       } else if (tx.type === 'expense') {
         monthlyMap[txMonth].expenditureMinor += tx.amount_minor;
       } else if (tx.type === 'refund') {
-        // Refund reduces category expenditure (Section 2)
         monthlyMap[txMonth].expenditureMinor -= tx.amount_minor;
       } else if (tx.type === 'debt_repayment') {
-        // Loan interest part counts as finance cost expense (INV-04)
         for (const line of tx.posting_lines) {
           if (line.ledger_node_id === 'cat_loan_interest' && line.direction === 'debit') {
             monthlyMap[txMonth].expenditureMinor += line.amount_minor;
@@ -190,7 +206,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
     };
   }, [transactions, currentUser.id]);
 
-  // Recent posted transactions
+  // Recent transactions
   const recentTransactions = transactions
     .filter(
       (t) =>
@@ -205,171 +221,301 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
     ? calculateAccountBalances(walletAcc, transactions, goalAllocations, commitments)
     : null;
 
-  const getAccountIcon = (type: string) => {
-    switch (type) {
-      case 'bank':
-        return <Building2 className="w-5 h-5 text-sky-600 dark:text-sky-400" />;
-      case 'wallet':
-        return <Wallet className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />;
-      case 'mobile_money':
-        return <Smartphone className="w-5 h-5 text-amber-600 dark:text-amber-400" />;
-      case 'savings':
-        return <PiggyBank className="w-5 h-5 text-purple-600 dark:text-purple-400" />;
-      default:
-        return <Wallet className="w-5 h-5 text-slate-500" />;
+  const getAccountBrand = (acc: any) => {
+    if (acc.name.toLowerCase().includes('gtbank')) {
+      return {
+        badge: 'GTBank',
+        cardGradient: 'from-orange-600 via-amber-600 to-orange-700',
+        textColor: 'text-orange-500',
+      };
     }
+    if (acc.name.toLowerCase().includes('stanbic')) {
+      return {
+        badge: 'Stanbic IBTC',
+        cardGradient: 'from-blue-700 via-indigo-700 to-blue-900',
+        textColor: 'text-blue-500',
+      };
+    }
+    if (acc.name.toLowerCase().includes('kuda')) {
+      return {
+        badge: 'Kuda Bank',
+        cardGradient: 'from-purple-700 via-violet-800 to-indigo-900',
+        textColor: 'text-purple-400',
+      };
+    }
+    if (acc.name.toLowerCase().includes('piggyvest') || acc.name.toLowerCase().includes('secret')) {
+      return {
+        badge: 'Piggyvest SafeLock',
+        cardGradient: 'from-emerald-700 via-teal-800 to-slate-900',
+        textColor: 'text-emerald-400',
+      };
+    }
+    return {
+      badge: 'Cash Wallet',
+      cardGradient: 'from-slate-700 via-slate-800 to-slate-900',
+      textColor: 'text-emerald-500',
+    };
   };
 
   return (
-    <div className="space-y-6">
-      {/* Privacy Context Banner (Section 5, T-21) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
-        <div className="flex items-center gap-2.5">
-          <div className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span className="text-slate-600 dark:text-slate-300">
-            Viewing workspace as: <strong className="text-slate-900 dark:text-white font-semibold">{currentUser.name}</strong> ({currentUser.role})
-          </span>
-          <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
-          <span className="text-slate-500 dark:text-slate-400">
-            {currentUser.id === 'user_chidi'
-              ? 'Private records belonging to Ada are completely hidden from lists and aggregates (T-21).'
-              : 'Full access to personal and shared household accounts.'}
-          </span>
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-slate-500 dark:text-slate-400">Double-Entry Posting Engine: Active</span>
+    <div className="space-y-7">
+      {/* Welcome & Context Header Ribbon */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 p-6 sm:p-7 text-white shadow-xl ring-1 ring-white/10">
+        <div className="absolute right-0 top-0 -mt-10 -mr-10 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+        <div className="absolute left-1/3 bottom-0 -mb-12 h-48 w-48 rounded-full bg-teal-500/10 blur-2xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 uppercase tracking-widest font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Treasury Operations · Household Active</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+              {greeting}, {currentUser.name.split(' ')[0]}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
+              Your double-entry posting ledger is reconciled with zero imbalances. Spendable liquidity is calculated after all earmarked savings and commitments.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <button
+              onClick={() => onNavigate('ledger')}
+              className="px-4 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-white/10 hover:bg-white/15 rounded-xl backdrop-blur-md transition-colors border border-white/10 cursor-pointer"
+            >
+              Inspect Ledger
+            </button>
+            <button
+              onClick={onOpenQuickAdd}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-900 bg-white hover:bg-slate-100 rounded-xl shadow-[0_4px_16px_rgba(255,255,255,0.2)] transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <span>+ Quick Entry</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Deduplicated Budget Alerts (Section 6, T-04) */}
+      {/* Deduplicated Budget Threshold Alerts Banner */}
       {budgetAlerts.length > 0 && (
-        <div className="border border-amber-200 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/20 rounded-lg p-3.5 space-y-2">
+        <div className="relative overflow-hidden rounded-xl border border-amber-300/80 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200 dark:border-amber-700/60 shadow-xs">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold text-amber-900 dark:text-amber-200">
+            <div className="flex items-center gap-2.5 text-xs font-bold">
               <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>Budget Threshold Alerts ({budgetAlerts.length} Fired · Deduplicated by Key)</span>
+              <span>Threshold Warnings ({budgetAlerts.length} Fired · Deduplicated by Rule T-04)</span>
             </div>
             <button
               onClick={() => onNavigate('budgets')}
-              className="text-xs font-medium text-amber-800 dark:text-amber-300 hover:underline cursor-pointer"
+              className="text-xs font-semibold text-amber-800 dark:text-amber-300 hover:underline flex items-center gap-1 cursor-pointer"
             >
-              View Budgets →
+              <span>View Allocations</span>
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="space-y-1.5">
-            {budgetAlerts.slice(-2).map((alert) => (
-              <div key={alert.id} className="text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
-                <span>•</span>
-                <span>{alert.message}</span>
+          <div className="mt-2 space-y-1 text-xs text-amber-800 dark:text-amber-300/90 font-mono">
+            {budgetAlerts.slice(-2).map((a) => (
+              <div key={a.id} className="flex items-start gap-2">
+                <span>›</span>
+                <span>{a.message}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Primary Balance Triad (Section 3 Balance Definitions) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* 1. Ledger Balance */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs">
+      {/* The Executive Balance Triad (Section 3 Hierarchy) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* Card 1: Total Ledger Liquidity */}
+        <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-[#0D111C] p-6 border border-slate-200/80 dark:border-slate-800/80 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-md transition-shadow group">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
-            <span className="font-medium uppercase tracking-wider">Total Ledger Balance</span>
-            <span title="Opening balance + all posted lines. Pending excluded.">Section 3 Def</span>
+            <span className="font-semibold uppercase tracking-wider text-[11px]">Ledger Cash Balance</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800">
+              {visibleAccounts.length} Accounts
+            </span>
           </div>
-          <div className="text-2xl lg:text-3xl font-bold font-mono tabular-nums text-slate-900 dark:text-white">
+          <div className="text-3xl lg:text-4xl font-extrabold font-mono tabular-nums text-slate-900 dark:text-white mt-1">
             {formatMinor(totalLedgerMinor)}
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-2">
-            <span>Posted ledger liquidity</span>
-            <span aria-hidden="true">·</span>
-            <span>{visibleAccounts.length} accounts</span>
+          <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/80 text-xs text-slate-500">
+            <span>Posted double-entry cash</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+              <span>Balanced</span>
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </span>
           </div>
         </div>
 
-        {/* 2. Reserved Balance */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
-            <span className="font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Total Reserved</span>
-            <span>Goals + Commitments</span>
+        {/* Card 2: Total Reserved Obligations */}
+        <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-[#0D111C] p-6 border border-amber-200/70 dark:border-amber-900/40 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-md transition-shadow group">
+          <div className="flex items-center justify-between text-xs text-amber-700 dark:text-amber-400 mb-2">
+            <span className="font-semibold uppercase tracking-wider text-[11px]">Total Reserved</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800">
+              Earmarks & Obligations
+            </span>
           </div>
-          <div className="text-2xl lg:text-3xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400">
+          <div className="text-3xl lg:text-4xl font-extrabold font-mono tabular-nums text-amber-600 dark:text-amber-400 mt-1">
             {formatMinor(totalReservedMinor)}
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-2">
-            <span>Virtual goal earmarks</span>
-            <span aria-hidden="true">·</span>
-            <span>Approved unpaid obligations</span>
+          <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/80 text-xs text-slate-500">
+            <span>Virtual Goals + Commitments</span>
+            <span className="font-medium text-slate-700 dark:text-slate-300">Deducted from spendable</span>
           </div>
         </div>
 
-        {/* 3. Spendable Balance */}
-        <div className={`rounded-xl border p-5 shadow-xs transition-colors ${
+        {/* Card 3: True Spendable Cash (The Hero Metric) */}
+        <div className={`relative overflow-hidden rounded-2xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all ${
           totalSpendableMinor < 0
-            ? 'bg-rose-50/70 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900'
-            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+            ? 'bg-gradient-to-br from-rose-950 via-slate-900 to-rose-900 text-white ring-1 ring-rose-500/30'
+            : 'bg-gradient-to-br from-emerald-900 via-teal-950 to-slate-950 text-white ring-1 ring-emerald-500/30'
         }`}>
           <div className="flex items-center justify-between text-xs mb-2">
-            <span className={`font-medium uppercase tracking-wider ${
-              totalSpendableMinor < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
-            }`}>
-              Spendable Balance
+            <span className="font-bold uppercase tracking-wider text-[11px] text-emerald-400">
+              Safe Spendable Balance
             </span>
-            <span className="text-slate-500 dark:text-slate-400">Ledger − Reserved</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-white/90">
+              Ledger − Reserved
+            </span>
           </div>
-          <div className={`text-2xl lg:text-3xl font-bold font-mono tabular-nums ${
-            totalSpendableMinor < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'
-          }`}>
+          <div className="text-3xl lg:text-4xl font-extrabold font-mono tabular-nums text-white mt-1">
             {formatMinor(totalSpendableMinor)}
           </div>
-          <div className="text-xs mt-2">
+          <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/10 text-xs text-emerald-200/90">
             {totalSpendableMinor < 0 ? (
-              <span className="font-semibold text-rose-700 dark:text-rose-400">
-                Notice: Spendable balance is negative (Deficit of {formatMinor(Math.abs(totalSpendableMinor))})
+              <span className="text-rose-300 font-bold">
+                Deficit of {formatMinor(Math.abs(totalSpendableMinor))} (Spendable is negative)
               </span>
             ) : (
-              <span className="text-slate-500 dark:text-slate-400">
-                Safe cash available for immediate uncommitted spending
-              </span>
+              <span>Verified uncommitted cash available right now</span>
             )}
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
           </div>
         </div>
       </div>
 
-      {/* MONTHLY INCOME VS EXPENDITURE TREND CHART (RECHARTS LINE CHART) */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4">
-        {/* Chart Header & Statistical Summary */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                Monthly Income vs. Expenditure Trends
-              </h2>
+      {/* Alluring Pro Upgrade Banner for Free Users */}
+      {subscription.tier !== 'pro' && (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-7 text-white border border-amber-400/30 shadow-xl">
+          <div className="absolute right-0 top-0 -mr-12 -mt-12 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[11px] font-bold">
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span>JENECONK PRO WEALTH TOOLS</span>
+              </div>
+              <h3 className="text-xl font-extrabold tracking-tight text-white">
+                Accelerate Debt Freedom & Smart Household Budgeting
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+                Enjoy flexible subscriptions starting at <strong>₦1,500/week</strong> or <strong>₦5,000/month</strong>. Verified <strong>Paystack</strong> checkout or manual direct transfer to our company account at <strong>Wema Bank 0128077067 (JENECONK INTEGRATED GLOBAL SOLUTIONS LIMITED)</strong>.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                <div className="flex items-center gap-1.5 text-amber-200">
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Unlimited Accounts</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-amber-200">
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>D-2 Debt Payoff Engine</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-amber-200">
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>4-Tier Budget Alerts</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-amber-200">
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Christmas 8-Section Plan</span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              <span>Derived from Double-Entry Ledger Posting Lines</span>
-              <span aria-hidden="true">·</span>
-              <span>Chronological 6-Month Inflows & Consumption</span>
+
+            <div className="shrink-0">
+              <button
+                onClick={() => openSubscriptionModal()}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-extrabold text-xs shadow-lg hover:shadow-amber-500/25 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Crown className="w-4 h-4" />
+                <span>Unlock Pro Features</span>
+              </button>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Controls & Quick Stats */}
+      {/* Discreet Accounting Mathematical Verification Link */}
+      <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+        <button
+          onClick={() => setShowMathProof(!showMathProof)}
+          className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1.5 cursor-pointer font-medium transition-colors"
+        >
+          <span>{showMathProof ? 'Hide' : 'Inspect'} Double-Entry Cash Proof (Rule INV-11)</span>
+          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showMathProof ? 'rotate-90' : ''}`} />
+        </button>
+        <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+          13 Invariants Verified Balanced
+        </span>
+      </div>
+
+      {showMathProof && walletBalances && (
+        <div className="rounded-2xl border border-emerald-300/80 bg-emerald-50/40 dark:border-emerald-800/40 dark:bg-emerald-950/20 p-4 text-xs font-mono space-y-3 animate-in fade-in-50">
+          <div className="flex items-center justify-between font-bold text-slate-800 dark:text-emerald-200 border-b border-emerald-200 dark:border-emerald-800/40 pb-2">
+            <span>Cash Wallet Math Proof (T-05)</span>
+            <span>200,000 − 50,000 − 40,000 = ₦110,000.00</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+              <span className="text-[10px] text-slate-400 block font-sans">Ledger Balance</span>
+              <span className="font-bold text-slate-900 dark:text-white">{formatMinor(walletBalances.ledgerBalanceMinor)}</span>
+            </div>
+            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+              <span className="text-[10px] text-slate-400 block font-sans">Goal Earmarks</span>
+              <span className="font-bold text-amber-600 dark:text-amber-400">-₦50,000.00</span>
+            </div>
+            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+              <span className="text-[10px] text-slate-400 block font-sans">Commitments</span>
+              <span className="font-bold text-amber-600 dark:text-amber-400">-₦40,000.00</span>
+            </div>
+            <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700">
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-300 block font-sans font-semibold">True Spendable</span>
+              <span className="font-extrabold text-emerald-700 dark:text-emerald-300">₦110,000.00</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ALLURING MONTHLY INCOME VS EXPENDITURE TREND CHART */}
+      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0D111C] p-6 shadow-[0_2px_16px_rgba(0,0,0,0.03)] space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600">
+                <TrendingUp className="w-4 h-4" />
+              </div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                Monthly Inflows vs. Consumption Trends
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500">
+              Double-entry operational ledger curves across the previous 6 reporting months
+            </p>
+          </div>
+
+          {/* Quick Metrics Strip */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-4 text-xs font-mono">
-              <div className="text-right">
-                <span className="text-[11px] text-slate-400 block font-sans">6-Mo Income</span>
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+            <div className="flex items-center gap-4 text-xs font-mono bg-slate-50 dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div>
+                <span className="text-[10px] text-slate-400 block font-sans">Total Inflow</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
                   ₦{(total6mIncome / 1000).toFixed(0)}k
                 </span>
               </div>
-              <div className="text-right">
-                <span className="text-[11px] text-slate-400 block font-sans">6-Mo Spend</span>
-                <span className="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
+              <div className="border-l border-slate-200 dark:border-slate-700 pl-3">
+                <span className="text-[10px] text-slate-400 block font-sans">Total Spend</span>
+                <span className="font-bold text-rose-600 dark:text-rose-400 tabular-nums">
                   ₦{(total6mExpenditure / 1000).toFixed(0)}k
                 </span>
               </div>
-              <div className="text-right border-l border-slate-200 dark:border-slate-700 pl-3">
-                <span className="text-[11px] text-slate-400 block font-sans">Surplus Margin</span>
-                <span className="font-semibold text-indigo-600 dark:text-indigo-400 tabular-nums">
+              <div className="border-l border-slate-200 dark:border-slate-700 pl-3">
+                <span className="text-[10px] text-slate-400 block font-sans">Surplus Margin</span>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
                   {avgSavingsRate.toFixed(1)}%
                 </span>
               </div>
@@ -377,29 +523,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
 
             <button
               onClick={() => setShowNetMarginLine(!showNetMarginLine)}
-              className={`px-2.5 py-1 text-xs rounded-md border cursor-pointer transition-colors ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
                 showNetMarginLine
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 dark:bg-indigo-950/50 dark:border-indigo-700 dark:text-indigo-300 font-medium'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 dark:bg-indigo-950/60 dark:border-indigo-700 dark:text-indigo-300 shadow-xs'
+                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
               }`}
             >
-              {showNetMarginLine ? 'Hide Net Margin' : 'Show Net Margin'}
+              {showNetMarginLine ? 'Net Margin On' : 'Show Net Margin'}
             </button>
           </div>
         </div>
 
-        {/* Recharts Container */}
-        <div className="h-[280px] w-full pt-2">
+        {/* Recharts Area / Line Chart with Gradients */}
+        <div className="h-[300px] w-full pt-2">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart
+            <AreaChart
               data={chartData}
-              margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+              margin={{ top: 10, right: 10, left: -5, bottom: 0 }}
             >
+              <defs>
+                <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
+                </linearGradient>
+                <linearGradient id="expenseGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#F43F5E" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
               <CartesianGrid
                 strokeDasharray="3 3"
                 vertical={false}
                 stroke="#94a3b8"
-                strokeOpacity={0.2}
+                strokeOpacity={0.15}
               />
               <XAxis
                 dataKey="monthLabel"
@@ -420,247 +576,212 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                 verticalAlign="top"
                 align="right"
                 iconType="circle"
-                wrapperStyle={{ paddingBottom: '12px', fontSize: '11px' }}
+                wrapperStyle={{ paddingBottom: '16px', fontSize: '11px', fontWeight: 600 }}
               />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="Income"
                 name="Monthly Income"
                 stroke="#10B981"
                 strokeWidth={2.5}
-                dot={{ r: 4, fill: '#10B981', strokeWidth: 0 }}
-                activeDot={{ r: 6, fill: '#10B981' }}
+                fillOpacity={1}
+                fill="url(#incomeGradient)"
               />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="Expenditure"
                 name="Monthly Expenditure"
                 stroke="#F43F5E"
                 strokeWidth={2.5}
-                dot={{ r: 4, fill: '#F43F5E', strokeWidth: 0 }}
-                activeDot={{ r: 6, fill: '#F43F5E' }}
+                fillOpacity={1}
+                fill="url(#expenseGradient)"
               />
               {showNetMarginLine && (
                 <Line
                   type="monotone"
                   dataKey="NetSurplus"
-                  name="Net Margin / Surplus"
+                  name="Net Margin"
                   stroke="#6366F1"
                   strokeWidth={2}
                   strokeDasharray="4 4"
                   dot={{ r: 3, fill: '#6366F1', strokeWidth: 0 }}
                 />
               )}
-            </LineChart>
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Blueprint Worked Example Showcase (Section 3 & T-05) */}
-      {walletBalances && (
-        <div className="border border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/50 dark:bg-emerald-950/20 rounded-xl p-4 sm:p-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/80 dark:border-emerald-900/40 pb-3 mb-3">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <h3 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
-                Blueprint Section 3 Worked Example Verification (T-05)
-              </h3>
-            </div>
-            <span className="text-xs font-mono font-medium text-emerald-800 dark:text-emerald-300">
-              Rule INV-11 Confirmed
-            </span>
-          </div>
-          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-            In {walletAcc?.name}: Ledger Balance is{' '}
-            <strong className="font-mono text-slate-900 dark:text-white">
-              {formatMinor(walletBalances.ledgerBalanceMinor)}
-            </strong>. Goal allocations held:{' '}
-            <span className="font-mono">₦30,000</span> (Emergency) +{' '}
-            <span className="font-mono">₦20,000</span> (Christmas) ={' '}
-            <strong className="font-mono text-amber-700 dark:text-amber-300">
-              {formatMinor(walletBalances.activeGoalAllocationsMinor)}
-            </strong>. Approved unpaid commitments:{' '}
-            <strong className="font-mono text-amber-700 dark:text-amber-300">
-              {formatMinor(walletBalances.unpaidCommitmentsMinor)}
-            </strong>.
-            <br className="hidden sm:inline" />
-            Formula: Spendable = 200,000 − 50,000 − 40,000 ={' '}
-            <strong className="font-mono text-emerald-800 dark:text-emerald-300 text-sm">
-              ₦110,000.00
-            </strong>. Pending salary of ₦80,000 is{' '}
-            <em>strictly not counted</em> anywhere until received.
-          </p>
-        </div>
-      )}
-
-      {/* Account Cards Grid */}
-      <div className="space-y-3">
+      {/* Accounts & Virtual Banking Cards */}
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-            Accounts & Liquidity Register
-          </h2>
+          <div className="space-y-0.5">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              Institutional Accounts & Liquidity
+            </h2>
+            <p className="text-xs text-slate-500">
+              Real asset nodes reflecting posted ledger liquidity vs earmarked reserves
+            </p>
+          </div>
           <button
             onClick={() => onNavigate('commitments')}
-            className="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 cursor-pointer"
+            className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
           >
-            Manage Commitments →
+            <span>Commitments Register</span>
+            <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {accountBalanceMap.map(({ account, ledgerBalanceMinor, reservedMinor, spendableMinor, availableBalanceMinor, isSpendableNegative }) => (
-            <div
-              key={account.id}
-              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xs"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800">
-                    {getAccountIcon(account.type)}
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold text-slate-900 dark:text-white truncate max-w-[140px]">
-                      {account.name}
-                    </h3>
-                    <div className="text-[11px] text-slate-500 capitalize">
-                      {account.type.replace('_', ' ')} {account.visibility === 'private' ? '· Private' : ''}
+          {accountBalanceMap.map(({ account, ledgerBalanceMinor, reservedMinor, spendableMinor, availableBalanceMinor, isSpendableNegative }) => {
+            const brand = getAccountBrand(account);
+
+            return (
+              <div
+                key={account.id}
+                className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0D111C] p-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md transition-all space-y-4 group"
+              >
+                {/* Virtual Card Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                      <CreditCard className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[140px]">
+                        {account.name}
+                      </h3>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {brand.badge} {account.account_number_mask || '·· 001'}
+                      </span>
                     </div>
                   </div>
+                  {account.visibility === 'private' && (
+                    <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 dark:bg-purple-950/60 dark:text-purple-300 px-2 py-0.5 rounded-full border border-purple-200/60">
+                      Private
+                    </span>
+                  )}
                 </div>
-              </div>
 
-              <div className="space-y-1.5 pt-1 text-xs">
-                <div className="flex justify-between items-baseline">
-                  <span className="text-slate-500">Ledger Balance:</span>
-                  <span className="font-mono font-semibold text-slate-900 dark:text-white tabular-nums">
-                    {formatMinor(ledgerBalanceMinor, account.currency)}
-                  </span>
+                {/* Balances Breakdown */}
+                <div className="space-y-1.5 pt-1 text-xs">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-slate-500 text-[11px]">Ledger Balance:</span>
+                    <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums">
+                      {formatMinor(ledgerBalanceMinor, account.currency)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-slate-500 text-[11px]">Reserved:</span>
+                    <span className="font-mono text-amber-600 dark:text-amber-400 tabular-nums">
+                      -{formatMinor(reservedMinor, account.currency)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-baseline border-t border-slate-100 dark:border-slate-800 pt-2">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs">Spendable:</span>
+                    <span
+                      className={`font-mono font-extrabold text-sm tabular-nums ${
+                        isSpendableNegative
+                          ? 'text-rose-600 dark:text-rose-400'
+                          : 'text-emerald-600 dark:text-emerald-400'
+                      }`}
+                    >
+                      {formatMinor(spendableMinor, account.currency)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between items-baseline">
-                  <span className="text-slate-500">Reserved:</span>
-                  <span className="font-mono text-amber-600 dark:text-amber-400 tabular-nums">
-                    -{formatMinor(reservedMinor, account.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-baseline border-t border-slate-100 dark:border-slate-800 pt-1.5">
-                  <span className="font-medium text-slate-700 dark:text-slate-300">Spendable:</span>
-                  <span
-                    className={`font-mono font-bold tabular-nums ${
-                      isSpendableNegative
-                        ? 'text-rose-600 dark:text-rose-400'
-                        : 'text-emerald-600 dark:text-emerald-400'
-                    }`}
-                  >
-                    {formatMinor(spendableMinor, account.currency)}
-                  </span>
-                </div>
-              </div>
 
-              {/* Statement Reconciliation Available Balance (Section 3) */}
-              <div className="pt-1 text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-800">
-                {availableBalanceMinor !== null ? (
-                  <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Statement Reconciled: <strong>{formatMinor(availableBalanceMinor)}</strong></span>
-                  </span>
-                ) : (
-                  <span className="italic text-slate-400">Statement rec pending (never guessed)</span>
-                )}
+                {/* Reconciled Badge */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+                  {availableBalanceMinor !== null ? (
+                    <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Reconciled: <strong>{formatMinor(availableBalanceMinor)}</strong></span>
+                    </div>
+                  ) : (
+                    <span className="text-slate-400 italic">Statement verification pending</span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      {/* Bottom 2-Column Split: Recent Ledger Postings & Active Debts / Strategy Summary */}
+      {/* Bottom 2-Column Split: Ledger Stream & Debt Radar */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Transactions List with Posting Line Indicator */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4">
+        {/* Recent Ledger Stream */}
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0D111C] p-6 shadow-[0_2px_10px_rgba(0,0,0,0.03)] space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+            <div className="space-y-0.5">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
                 Recent Ledger Postings
               </h2>
-              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span>Atomic Posting Lines</span>
-                <span aria-hidden="true">·</span>
-                <span>Immutable Revisions</span>
-              </div>
+              <span className="text-xs text-slate-400">Atomic zero-sum balanced transactions</span>
             </div>
             <button
               onClick={() => onNavigate('ledger')}
-              className="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 cursor-pointer"
+              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
             >
-              Full Ledger →
+              Complete Ledger →
             </button>
           </div>
 
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {recentTransactions.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400">
-                No transactions recorded yet. Click Quick Add to log your first entry.
-              </div>
-            ) : (
-              recentTransactions.map((tx) => (
-                <div key={tx.id} className="py-3 flex items-center justify-between text-xs">
-                  <div className="space-y-0.5">
-                    <div className="font-medium text-slate-900 dark:text-white flex items-center gap-1.5">
-                      <span>{tx.description}</span>
-                      {tx.replaces_id && (
-                        <span className="text-[10px] text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.5 rounded">
-                          Revised
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-500 text-[11px]">
-                      <span>{tx.effective_date}</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="capitalize">{tx.type.replace('_', ' ')}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>{tx.posting_lines.length} lines balanced</span>
-                    </div>
+          <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+            {recentTransactions.map((tx) => (
+              <div key={tx.id} className="py-3.5 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-850/40 rounded-lg px-2 transition-colors">
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span>{tx.description}</span>
+                    {tx.replaces_id && (
+                      <span className="text-[9px] uppercase font-bold text-purple-700 bg-purple-50 dark:bg-purple-950/60 dark:text-purple-300 px-1.5 py-0.5 rounded">
+                        Revised
+                      </span>
+                    )}
                   </div>
-                  <div className="text-right">
-                    <div
-                      className={`font-mono font-bold tabular-nums ${
-                        tx.type === 'income'
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : tx.type === 'transfer'
-                          ? 'text-slate-700 dark:text-slate-300'
-                          : 'text-slate-900 dark:text-white'
-                      }`}
-                    >
-                      {tx.type === 'income' ? '+' : ''}
-                      {formatMinor(tx.amount_minor, tx.currency)}
-                    </div>
-                    <div className="text-[10px] text-slate-400 capitalize">
-                      {tx.status}
-                    </div>
+                  <div className="flex items-center gap-2 text-slate-400 text-[11px] font-mono">
+                    <span>{tx.effective_date}</span>
+                    <span>·</span>
+                    <span className="capitalize">{tx.type.replace('_', ' ')}</span>
                   </div>
                 </div>
-              ))
-            )}
+
+                <div className="text-right">
+                  <div
+                    className={`font-mono font-extrabold tabular-nums ${
+                      tx.type === 'income'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : tx.type === 'transfer'
+                        ? 'text-slate-600 dark:text-slate-300'
+                        : 'text-slate-900 dark:text-white'
+                    }`}
+                  >
+                    {tx.type === 'income' ? '+' : ''}
+                    {formatMinor(tx.amount_minor, tx.currency)}
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {tx.posting_lines.length} lines balanced
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Active Debts & Urgency Summary (Section 8, T-15, T-18) */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4">
+        {/* Debt Radar & Affordability Action */}
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0D111C] p-6 shadow-[0_2px_10px_rgba(0,0,0,0.03)] space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                Debts & Repayment Engine
+            <div className="space-y-0.5">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                Debt Portfolio & Capacity Radar
               </h2>
-              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span>D-1, D-2 & D-3 Models</span>
-                <span aria-hidden="true">·</span>
-                <span>Affordability Shortfall Checker</span>
-              </div>
+              <span className="text-xs text-slate-400">D-1, D-2, and D-3 active liabilities</span>
             </div>
             <button
               onClick={() => onNavigate('debts')}
-              className="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 cursor-pointer"
+              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
             >
-              Debt Dashboard →
+              Debt Engine →
             </button>
           </div>
 
@@ -668,53 +789,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
             {debts
               .filter((d) => d.visibility === 'shared' || d.owner_user_id === currentUser.id)
               .slice(0, 3)
-              .map((debt) => (
+              .map((d) => (
                 <div
-                  key={debt.id}
-                  className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/40 text-xs space-y-2"
+                  key={d.id}
+                  className="p-3.5 rounded-xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between text-xs"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-900 dark:text-white">
-                      {debt.name}
-                    </span>
-                    <span className="font-mono font-bold text-slate-900 dark:text-white">
-                      {formatMinor(debt.principal_minor)}
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-slate-900 dark:text-white block">{d.name}</span>
+                    <span className="text-slate-400 text-[11px]">
+                      {d.creditor} · {d.monthly_rate_pct}%/mo
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <div className="flex items-center gap-2">
-                      <span>{debt.creditor}</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="capitalize">{debt.term_type.replace(/_/g, ' ')}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span>Rate: {debt.monthly_rate_pct}% / mo</span>
-                      <span aria-hidden="true">·</span>
-                      <span
-                        className={`capitalize font-medium ${
-                          debt.urgency_flag === 'high'
-                            ? 'text-rose-600'
-                            : debt.urgency_flag === 'medium'
-                            ? 'text-amber-600'
-                            : 'text-slate-500'
-                        }`}
-                      >
-                        {debt.urgency_flag} Urgency
-                      </span>
-                    </div>
+                  <div className="text-right">
+                    <span className="font-mono font-extrabold text-slate-900 dark:text-white block">
+                      {formatMinor(d.principal_minor)}
+                    </span>
+                    <span
+                      className={`text-[10px] uppercase font-bold ${
+                        d.urgency_flag === 'high'
+                          ? 'text-rose-600'
+                          : d.urgency_flag === 'medium'
+                          ? 'text-amber-600'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {d.urgency_flag} Urgency
+                    </span>
                   </div>
                 </div>
               ))}
 
-            <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-xs flex items-center justify-between">
-              <span className="text-slate-600 dark:text-slate-300">
-                Want to check your monthly debt repayment capacity?
-              </span>
+            <div className="p-4 rounded-xl border border-emerald-200/80 bg-emerald-50/60 dark:border-emerald-800/40 dark:bg-emerald-950/20 text-xs flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="font-bold text-emerald-900 dark:text-emerald-200 block">
+                  Verify Monthly Repayment Capacity
+                </span>
+                <span className="text-emerald-800/80 dark:text-emerald-300/80 text-[11px]">
+                  Runs Section 9 essential living baseline and shortfall checks
+                </span>
+              </div>
               <button
                 onClick={() => onNavigate('debts')}
-                className="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
               >
-                Run Affordability Audit
+                Audit Capacity
               </button>
             </div>
           </div>

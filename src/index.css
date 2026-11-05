@@ -4,25 +4,52 @@
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.011em;
   }
   
   .font-mono, code, kbd, samp, pre {
     font-family: 'JetBrains Mono', monospace;
+    font-feature-settings: "tnum" 1, "cv01" 1;
+  }
+
+  /* Optical smoothing for headings */
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.022em;
   }
 }
 
-/* Custom scrollbars for data tables and horizontal grids */
+/* Ambient glow and luxury fintech subtle patterns */
+.luxury-glass-light {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+}
+
+.dark .luxury-glass-dark {
+  background: rgba(13, 17, 28, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(30, 41, 59, 0.8);
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
-  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.6);
+  background: rgba(100, 116, 139, 0.5);
+}
+
+/* Tabular numbers for all monetary data */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }

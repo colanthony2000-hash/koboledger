@@ -213,11 +213,27 @@ export interface AuditLog {
   revision_group_id?: string;
 }
 
+export type SubscriptionTier = 'free' | 'pro';
+export type SubscriptionBilling = 'weekly' | 'monthly' | 'annual';
+
+export interface UserSubscription {
+  tier: SubscriptionTier;
+  billingCycle?: SubscriptionBilling;
+  status: 'active' | 'free' | 'expired';
+  expiresAt?: string;
+  paymentMethod?: 'paystack' | 'manual_bank_transfer';
+  paymentReference?: string;
+  amountPaidMinor?: number;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
   role: 'owner' | 'member' | 'auditor';
   avatar_initials: string;
+  email?: string;
+  photoURL?: string;
+  subscription?: UserSubscription;
 }
 
 export interface StatementReconciliation {

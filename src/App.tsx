@@ -10,7 +10,7 @@ import { CommitmentsView } from './components/CommitmentsView';
 import { AcceptanceTestsView } from './components/AcceptanceTestsView';
 import { QuickAddModal } from './components/QuickAddModal';
 import { BackupModal } from './components/BackupModal';
-import { ShieldCheck, Database, FileText } from 'lucide-react';
+import { SubscriptionModal } from './components/SubscriptionModal';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
@@ -30,8 +30,8 @@ export default function App() {
 
   return (
     <FinanceProvider>
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
-        {/* Top Navigation Bar adhering to Top Bar Contract */}
+      <div className="min-h-screen bg-[#F8F9FC] dark:bg-[#080B11] text-slate-900 dark:text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
+        {/* Top Navigation Bar with JENECONK Branding */}
         <Header
           currentTab={currentTab}
           setCurrentTab={setCurrentTab}
@@ -63,7 +63,7 @@ export default function App() {
           {currentTab === 'tests' && <AcceptanceTestsView />}
         </main>
 
-        {/* Modals */}
+        {/* Core Modals */}
         <QuickAddModal
           isOpen={isQuickAddOpen}
           onClose={() => setIsQuickAddOpen(false)}
@@ -74,35 +74,40 @@ export default function App() {
           onClose={() => setIsBackupOpen(false)}
         />
 
+        <SubscriptionModal />
+
         {/* Quiet Editorial Footer */}
-        <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-6 text-xs text-slate-500 transition-colors">
+        <footer className="border-t border-slate-200/80 dark:border-white/5 bg-white dark:bg-[#0E131F] py-6 text-xs text-slate-500 transition-colors">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                KoboLedger Platform
+            <div className="flex items-center gap-2.5">
+              <img
+                src="/assets/aistudio/logo_bf2c43a3.png"
+                alt="JENECONK Logo"
+                className="w-5 h-5 rounded-full object-cover"
+              />
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                JENECONK INTEGRATED GLOBAL SOLUTIONS LIMITED
               </span>
-              <span aria-hidden="true">·</span>
-              <span>Blueprint v1.1 Implementation</span>
-              <span aria-hidden="true">·</span>
-              <span>Double-Entry Zero-Sum Ledger</span>
+              <span aria-hidden="true" className="text-slate-300 dark:text-white/10">·</span>
+              <span>KoboLedger Systems</span>
             </div>
 
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setCurrentTab('tests')}
-                className="hover:text-slate-900 dark:hover:text-slate-300 cursor-pointer"
+                className="hover:text-slate-900 dark:hover:text-slate-300 cursor-pointer transition-colors"
               >
                 Invariants (INV-01 to INV-13)
               </button>
-              <span aria-hidden="true">·</span>
+              <span aria-hidden="true" className="text-slate-300 dark:text-white/10">·</span>
               <button
                 onClick={() => setIsBackupOpen(true)}
-                className="hover:text-slate-900 dark:hover:text-slate-300 cursor-pointer"
+                className="hover:text-slate-900 dark:hover:text-slate-300 cursor-pointer transition-colors"
               >
-                Backup & Restore (T-22)
+                Backup & Restore
               </button>
-              <span aria-hidden="true">·</span>
-              <span>NGN (Kobo Units)</span>
+              <span aria-hidden="true" className="text-slate-300 dark:text-white/10">·</span>
+              <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">NGN Kobo Units</span>
             </div>
           </div>
         </footer>

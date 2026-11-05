@@ -1,6 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useFinance, SEED_USERS } from '../context/FinanceContext';
-import { Plus, ShieldAlert, Sparkles, User, RefreshCw, Sun, Moon } from 'lucide-react';
+import {
+  Plus,
+  Sun,
+  Moon,
+  ShieldCheck,
+  ChevronDown,
+  Sparkles,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  Crown,
+  CheckCircle2,
+  Lock,
+} from 'lucide-react';
 
 interface HeaderProps {
   currentTab: string;
@@ -19,21 +32,35 @@ export const Header: React.FC<HeaderProps> = ({
   darkMode,
   setDarkMode,
 }) => {
-  const { currentUser, switchUser, budgetAlerts } = useFinance();
+  const {
+    currentUser,
+    switchUser,
+    firebaseUser,
+    isFirebaseConnected,
+    isSyncing,
+    signInGoogle,
+    signOutGoogle,
+    subscription,
+    openSubscriptionModal,
+  } = useFinance();
+
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const navLinks = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'ledger', label: 'Posting Ledger' },
-    { id: 'debts', label: 'Debts & Affordability' },
-    { id: 'budgets', label: 'Budgets & Savings' },
-    { id: 'projects', label: 'Projects (Christmas)' },
+    { id: 'dashboard', label: 'Overview' },
+    { id: 'ledger', label: 'Ledger' },
+    { id: 'budgets', label: 'Budgets & Vaults' },
+    { id: 'debts', label: 'Debt Payoff' },
+    { id: 'projects', label: 'Christmas Plan' },
     { id: 'commitments', label: 'Commitments' },
   ];
 
+  const isPro = subscription.tier === 'pro' && subscription.status === 'active';
+
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95 transition-colors">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-8 px-4 sm:px-6 py-3.5">
-        {/* Zone 1: Single text element wordmark (Top Bar Contract §2) */}
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/90 dark:border-white/10 dark:bg-[#080B11]/90 backdrop-blur-md transition-colors">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 py-2.5">
+        {/* Zone 1: Brandmark with Company Logo & Status */}
         <div className="flex items-center gap-3 shrink-0">
           <a
             href="#"
@@ -41,31 +68,59 @@ export const Header: React.FC<HeaderProps> = ({
               e.preventDefault();
               setCurrentTab('dashboard');
             }}
-            className="flex items-center gap-2.5 text-slate-900 dark:text-white group"
+            className="flex items-center gap-3 group cursor-pointer"
           >
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-base shadow-sm group-hover:bg-emerald-700 transition-colors">
-              ₦
+            <div className="relative">
+              <img
+                src="/assets/aistudio/logo_bf2c43a3.png"
+                alt="JENECONK Integrated Global Solutions Logo"
+                className="w-9 h-9 rounded-full object-cover ring-2 ring-amber-400/30 group-hover:scale-105 transition-transform shadow-[0_2px_12px_rgba(10,37,64,0.25)]"
+              />
+              <span
+                className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-[#080B11] ${
+                  isSyncing
+                    ? 'bg-amber-400 animate-spin'
+                    : isFirebaseConnected
+                    ? 'bg-emerald-500'
+                    : 'bg-slate-400'
+                }`}
+                title={
+                  isSyncing
+                    ? 'Syncing with Firestore...'
+                    : isFirebaseConnected
+                    ? 'Firestore Connected'
+                    : 'Local Offline Mode'
+                }
+              />
             </div>
             <div className="flex flex-col">
-              <span className="text-lg font-bold tracking-tight whitespace-nowrap">
-                KoboLedger
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-white uppercase">
+                  JENECONK
+                </span>
+                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-300 font-mono">
+                  Ledger
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 -mt-0.5 font-medium">
+                Integrated Global Solutions
               </span>
             </div>
           </a>
         </div>
 
-        {/* Zone 2: 4-5 single-line clean text links with subtle underlines (Top Bar Contract §2) */}
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium">
+        {/* Zone 2: Navigation Links (Clean, Uncluttered, Calm) */}
+        <nav className="hidden lg:flex items-center gap-1 text-xs font-semibold">
           {navLinks.map((link) => {
             const isActive = currentTab === link.id;
             return (
               <button
                 key={link.id}
                 onClick={() => setCurrentTab(link.id)}
-                className={`whitespace-nowrap transition-colors py-1 cursor-pointer ${
+                className={`whitespace-nowrap px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   isActive
-                    ? 'text-emerald-700 font-semibold border-b-2 border-emerald-600 dark:text-emerald-400 dark:border-emerald-400'
-                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/5'
                 }`}
               >
                 {link.label}
@@ -74,65 +129,122 @@ export const Header: React.FC<HeaderProps> = ({
           })}
           <button
             onClick={onOpenTests}
-            className={`whitespace-nowrap transition-colors py-1 cursor-pointer flex items-center gap-1.5 ${
+            className={`whitespace-nowrap px-2.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
               currentTab === 'tests'
-                ? 'text-emerald-700 font-semibold border-b-2 border-emerald-600 dark:text-emerald-400 dark:border-emerald-400'
-                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                ? 'bg-emerald-600 text-white font-semibold'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/5'
             }`}
+            title="Inspect 13 Accounting Invariants and 23 Acceptance Tests"
           >
-            <span>Audit Tests (T01–T23)</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Audit</span>
           </button>
         </nav>
 
-        {/* Zone 3: 1 primary action + household switcher */}
-        <div className="flex items-center gap-3 shrink-0">
-          {/* Household Member Perspective Switcher (Section 5, T-21) */}
-          <div className="hidden sm:flex items-center gap-2 text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800">
-            <span className="text-slate-500 dark:text-slate-400">View as:</span>
+        {/* Zone 3: Subscription Status, User Perspective & Primary CTA */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Subscription Upgrade / Status Trigger */}
+          {isPro ? (
+            <button
+              onClick={() => openSubscriptionModal()}
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/10 via-amber-500/20 to-emerald-500/15 border border-amber-400/40 text-amber-800 dark:text-amber-300 text-xs font-bold hover:scale-[1.02] transition-transform cursor-pointer shadow-xs"
+              title="You are on the Pro Tier. Click to view subscription details."
+            >
+              <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+              <span>PRO ACTIVE</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => openSubscriptionModal()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white text-xs font-bold shadow-[0_2px_10px_rgba(245,158,11,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer whitespace-nowrap"
+            >
+              <Crown className="w-3.5 h-3.5" />
+              <span>Upgrade to Pro</span>
+            </button>
+          )}
+
+          {/* Real Firebase Google Sign-In */}
+          {firebaseUser ? (
+            <div className="hidden sm:flex items-center gap-1.5 border border-slate-200 dark:border-white/10 rounded-xl px-2 py-1 bg-white/70 dark:bg-white/5 text-xs">
+              {firebaseUser.photoURL ? (
+                <img
+                  src={firebaseUser.photoURL}
+                  alt={firebaseUser.displayName || 'User'}
+                  className="w-5 h-5 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[10px]">
+                  {firebaseUser.displayName?.[0] || 'U'}
+                </div>
+              )}
+              <button
+                onClick={() => signOutGoogle()}
+                className="text-slate-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                title="Sign out of Firebase"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => signInGoogle()}
+              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors cursor-pointer"
+              title="Sign in with Google"
+            >
+              <LogIn className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span>Sign In</span>
+            </button>
+          )}
+
+          {/* Household Role Switcher */}
+          <div className="flex items-center gap-1.5 border border-slate-200 dark:border-white/10 rounded-xl px-2 py-1 bg-white/70 dark:bg-white/5 text-xs">
+            <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center justify-center font-bold text-[9px]">
+              {currentUser.avatar_initials}
+            </div>
             <select
               value={currentUser.id}
               onChange={(e) => switchUser(e.target.value)}
-              className="bg-transparent font-medium text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer text-xs"
-              title="Switch user perspective to verify Section 5 & T-21 privacy rules"
+              className="bg-transparent font-medium text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer text-xs pr-1"
+              title="Switch user perspective"
             >
               {SEED_USERS.map((u) => (
-                <option key={u.id} value={u.id} className="dark:bg-slate-800">
-                  {u.name} ({u.role})
+                <option key={u.id} value={u.id} className="dark:bg-[#0E131F]">
+                  {u.name.split(' ')[0]} ({u.role})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Dark mode toggle */}
+          {/* Dark / Light Toggle */}
           <button
             onClick={() => setDarkMode(!darkMode)}
-            className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
             title="Toggle theme"
             aria-label="Toggle theme"
           >
-            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
           </button>
 
-          {/* Primary Action Button (Top Bar Contract §2) */}
+          {/* Primary Action Button */}
           <button
             onClick={onOpenQuickAdd}
-            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 transition-colors whitespace-nowrap cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer active:scale-95 whitespace-nowrap"
           >
-            <Plus className="w-4 h-4" />
-            <span>Quick Add</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Quick Add</span>
           </button>
         </div>
       </div>
 
-      {/* Mobile nav scrollbar */}
-      <div className="flex lg:hidden overflow-x-auto border-t border-slate-200 dark:border-slate-800 px-4 py-2 gap-4 text-xs font-medium no-scrollbar">
+      {/* Mobile Tab Navigation */}
+      <div className="flex lg:hidden overflow-x-auto border-t border-slate-200/80 dark:border-white/10 px-4 py-2 gap-1.5 text-xs font-medium no-scrollbar bg-slate-50/50 dark:bg-white/[0.02]">
         {navLinks.map((link) => (
           <button
             key={link.id}
             onClick={() => setCurrentTab(link.id)}
-            className={`whitespace-nowrap px-2 py-1 rounded cursor-pointer ${
+            className={`whitespace-nowrap px-3 py-1 rounded-lg cursor-pointer transition-colors ${
               currentTab === link.id
-                ? 'bg-emerald-50 text-emerald-700 font-semibold dark:bg-emerald-950 dark:text-emerald-300'
+                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-bold'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
             }`}
           >
@@ -141,13 +253,14 @@ export const Header: React.FC<HeaderProps> = ({
         ))}
         <button
           onClick={onOpenTests}
-          className={`whitespace-nowrap px-2 py-1 rounded cursor-pointer ${
+          className={`whitespace-nowrap px-3 py-1 rounded-lg cursor-pointer transition-colors flex items-center gap-1 ${
             currentTab === 'tests'
-              ? 'bg-emerald-50 text-emerald-700 font-semibold dark:bg-emerald-950 dark:text-emerald-300'
+              ? 'bg-emerald-600 text-white font-bold'
               : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
           }`}
         >
-          Audit Tests (T01–T23)
+          <ShieldCheck className="w-3 h-3" />
+          <span>Audit</span>
         </button>
       </div>
     </header>
