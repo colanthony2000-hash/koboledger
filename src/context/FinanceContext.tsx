@@ -40,7 +40,6 @@ import {
   persistTransaction,
   persistUserProfile,
   listenToTransactions,
-  ensurePersonalWorkspace,
 } from '../services/firebaseSync';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
@@ -1475,11 +1474,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setCurrentUser(updatedProfile);
 
         try {
-          await ensurePersonalWorkspace(updatedProfile.name);
           await persistUserProfile(updatedProfile);
           if (auth.currentUser?.uid === user.uid) setIsWorkspaceReady(true);
         } catch (err) {
-          console.warn('Could not initialize the private finance workspace:', err);
+          console.warn('Could not initialize the private finance profile.');
         }
       }
     });

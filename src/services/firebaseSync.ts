@@ -1,10 +1,10 @@
 import {
   collection,
   doc,
-  setDoc,
   onSnapshot,
-  getDoc,
-  writeBatch,
+  query,
+  setDoc,
+  where,
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import {
@@ -17,51 +17,29 @@ import {
   UserProfile,
 } from '../types/finance';
 
-function currentWorkspaceId(): string {
+function currentUserId(): string {
   const uid = auth.currentUser?.uid;
-  if (!uid) throw new Error('Sign in before accessing a financial workspace.');
+  if (!uid) throw new Error('Sign in before syncing financial records.');
   return uid;
 }
 
-function workspaceCollection(name: string) {
-  return collection(db, 'workspaces', currentWorkspaceId(), name);
-}
-
-function stampOwner<T extends object>(data: T) {
-  const uid = currentWorkspaceId();
-  return { ...data, workspace_id: uid, owner_user_id: uid };
-}
-
-/** Creates the signed-in user's isolated workspace and owner membership once. */
-export async function ensurePersonalWorkspace(displayName: string): Promise<void> {
-  const uid = currentWorkspaceId();
-  const workspaceRef = doc(db, 'workspaces', uid);
-  const memberRef = doc(db, 'workspaces', uid, 'members', uid);
-  const [workspaceSnap, memberSnap] = await Promise.all([getDoc(workspaceRef), getDoc(memberRef)]);
-
-  if (workspaceSnap.exists() && memberSnap.exists()) return;
-
-  const batch = writeBatch(db);
-  if (!workspaceSnap.exists()) {
-    batch.set(workspaceRef, {
-      owner_user_id: uid,
-      name: `${displayName || 'My'} workspace`,
-      type: 'personal',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-  }
-  if (!memberSnap.exists()) {
-    batch.set(memberRef, { uid, role: 'owner', createdAt: new Date().toISOString() });
-  }
-  await batch.commit();
+function privateRecord<T extends object>(record: T) {
+  const uid = currentUserId();
+  return {
+    ...record,
+    workspace_id: uid,
+    owner_user_id: uid,
+    visibility: 'private',
+    // Until real workspace invitations exist, every record is visible only to its owner.
+    sharedWith: [uid],
+  };
 }
 
 async function persistRecord<T extends { id: string }>(name: string, record: T): Promise<void> {
   try {
-    await setDoc(doc(workspaceCollection(name), record.id), stampOwner(record));
+    await setDoc(doc(db, name, record.id), privateRecord(record));
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `workspaces/{uid}/${name}/${record.id}`);
+    handleFirestoreError(error, OperationType.WRITE, `${name}/{recordId}`);
   }
 }
 
@@ -72,7 +50,7 @@ export const persistBudget = (record: Budget & { id: string }) => persistRecord(
 export const persistSavingsGoal = (record: SavingsGoal) => persistRecord('savings_goals', record);
 export const persistCommitment = (record: Commitment & { id: string }) => persistRecord('commitments', record);
 
-/** Stores only the signed-in user's own profile. Workspace membership is authoritative for roles. */
+/** Store only the signed-in user's profile in the private user document. */
 export async function persistUserProfile(user: UserProfile & { email?: string; photoURL?: string }): Promise<void> {
   try {
     await setDoc(doc(db, 'users', user.id), {
@@ -81,24 +59,28 @@ export async function persistUserProfile(user: UserProfile & { email?: string; p
       workspaceId: user.id,
       email: user.email || '',
       photoURL: user.photoURL || '',
-      updatedAt: new Date().toISOString(),
     }, { merge: true });
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `users/${user.id}`);
+    handleFirestoreError(error, OperationType.WRITE, 'users/{userId}');
   }
 }
 
-/** Listens only to transactions in the authenticated user's workspace. */
-export function listenToTransactions(_userId: string, onUpdate: (txs: Transaction[]) => void) {
+/** Query only records whose sharing list contains the authenticated user's UID. */
+export function listenToTransactions(userId: string, onUpdate: (txs: Transaction[]) => void) {
   const path = 'transactions';
+  const scopedQuery = query(
+    collection(db, path),
+    where('sharedWith', 'array-contains', userId)
+  );
+
   return onSnapshot(
-    workspaceCollection(path),
+    scopedQuery,
     (snapshot) => {
       const items: Transaction[] = [];
       snapshot.forEach((snapshotDoc) => items.push(snapshotDoc.data() as Transaction));
       items.sort((a, b) => b.effective_date.localeCompare(a.effective_date));
       onUpdate(items);
     },
-    (error) => handleFirestoreError(error, OperationType.GET, `workspaces/{uid}/${path}`)
+    (error) => handleFirestoreError(error, OperationType.GET, path)
   );
 }
