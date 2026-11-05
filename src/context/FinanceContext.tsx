@@ -1,0 +1,1721 @@
+/**
+ * KoboLedger Global State & Context Provider
+ * Implements persistent local storage, double-entry ledger state, privacy switching,
+ * offline synchronization, and deterministic quick-add flows.
+ */
+
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import {
+  Account,
+  AuditLog,
+  Budget,
+  BudgetAlert,
+  Category,
+  Commitment,
+  Debt,
+  GoalAllocation,
+  Project,
+  ProjectItem,
+  SavingsGoal,
+  StatementReconciliation,
+  Transaction,
+  UserProfile,
+} from '../types/finance';
+import {
+  buildPostingLinesForTemplate,
+  calculateAccountBalances,
+  executeTransactionEdit,
+  validateTransactionBalance,
+} from '../services/ledgerEngine';
+
+// Seed Users for Household Sharing (Section 5, T-21)
+export const SEED_USERS: UserProfile[] = [
+  { id: 'user_ada', name: 'Adaeze Okafor', role: 'owner', avatar_initials: 'AO' },
+  { id: 'user_chidi', name: 'Chidi Okafor', role: 'member', avatar_initials: 'CO' },
+  { id: 'user_auditor', name: 'Auditor (External)', role: 'auditor', avatar_initials: 'AU' },
+];
+
+// Seed Categories
+export const SEED_CATEGORIES: Category[] = [
+  { id: 'cat_food', name: 'Staple Foods & Groceries', type: 'expense', is_essential: true, color: '#16A34A' },
+  { id: 'cat_rent', name: 'House Rent & Estate Fees', type: 'expense', is_essential: true, color: '#0284C7' },
+  { id: 'cat_utilities', name: 'Power, Light & Utilities', type: 'expense', is_essential: true, color: '#D97706' },
+  { id: 'cat_transport', name: 'Commute, Transport & Fuel', type: 'expense', is_essential: true, color: '#EA580C' },
+  { id: 'cat_healthcare', name: 'Healthcare & Medications', type: 'expense', is_essential: true, color: '#DC2626' },
+  { id: 'cat_tuition', name: 'School Fees & Education', type: 'expense', is_essential: true, color: '#7C3AED' },
+  { id: 'cat_family', name: 'Family Support & Upkeep', type: 'expense', is_essential: true, color: '#059669' },
+  { id: 'cat_dining', name: 'Dining Out & Fast Food', type: 'expense', is_essential: false, color: '#E11D48' },
+  { id: 'cat_tech', name: 'Gadgets & Tech Upgrades', type: 'expense', is_essential: false, color: '#4F46E5' },
+  { id: 'cat_shopping', name: 'Shopping & Apparel', type: 'expense', is_essential: false, color: '#9333EA' },
+  { id: 'cat_financial_costs', name: 'Bank & Transaction Fees', type: 'financial_cost', is_essential: false, color: '#64748B' },
+  { id: 'cat_loan_interest', name: 'Loan Interest Costs', type: 'financial_cost', is_essential: false, color: '#B91C1C' },
+  { id: 'cat_income_salary', name: 'Salary & Core Income', type: 'income', is_essential: false, color: '#15803D' },
+  { id: 'cat_income_business', name: 'Side Business & Consulting', type: 'income', is_essential: false, color: '#047857' },
+];
+
+// Seed Accounts
+export const SEED_ACCOUNTS: Account[] = [
+  {
+    id: 'acc_wallet',
+    name: 'Daily Cash Wallet',
+    type: 'wallet',
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    opening_balance_minor: 20000000, // ₦200,000 (Section 3 & T-05 Worked Example)
+    is_reconciled: true,
+    last_reconciled_balance_minor: 20000000,
+    last_reconciled_date: '2026-11-01',
+  },
+  {
+    id: 'acc_bank',
+    name: 'GTBank Main Salary Current',
+    type: 'bank',
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    opening_balance_minor: 45000000, // ₦450,000
+    institution_name: 'Guaranty Trust Bank',
+    account_number_mask: '****4921',
+    is_reconciled: true,
+    last_reconciled_balance_minor: 45000000,
+    last_reconciled_date: '2026-11-01',
+  },
+  {
+    id: 'acc_kuda',
+    name: 'Kuda Mobile Money',
+    type: 'mobile_money',
+    currency: 'NGN',
+    owner_user_id: 'user_chidi',
+    visibility: 'shared',
+    opening_balance_minor: 7500000, // ₦75,000
+    institution_name: 'Kuda Microfinance Bank',
+    account_number_mask: '****8102',
+    is_reconciled: false,
+  },
+  {
+    id: 'acc_stanbic',
+    name: 'Stanbic Wealth Savings',
+    type: 'savings',
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    opening_balance_minor: 60000000, // ₦600,000
+    institution_name: 'Stanbic IBTC Bank',
+    account_number_mask: '****0339',
+    is_reconciled: true,
+    last_reconciled_balance_minor: 60000000,
+    last_reconciled_date: '2026-11-01',
+  },
+  {
+    id: 'acc_ada_private',
+    name: 'Ada Secret Contingency',
+    type: 'savings',
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'private', // Demonstrates T-21 Privacy Boundary
+    opening_balance_minor: 12000000, // ₦120,000
+    institution_name: 'Piggyvest SafeLock',
+    account_number_mask: '****7712',
+    is_reconciled: true,
+    last_reconciled_balance_minor: 12000000,
+    last_reconciled_date: '2026-11-01',
+  },
+];
+
+// Initial Opening Balance Transactions (Balancing strictly to zero per INV-13)
+const initialOpeningTxs: Transaction[] = SEED_ACCOUNTS.map((acc) => {
+  const lines = buildPostingLinesForTemplate({
+    transactionId: `tx_init_${acc.id}`,
+    type: 'opening_balance',
+    amountMinor: acc.opening_balance_minor,
+    currency: acc.currency,
+    accountId: acc.id,
+  });
+  return {
+    id: `tx_init_${acc.id}`,
+    workspace_id: 'ws_main',
+    type: 'opening_balance',
+    description: `Opening balance for ${acc.name}`,
+    effective_date: '2026-06-01',
+    created_at: '2026-06-01T08:00:00Z',
+    status: 'posted',
+    revision_group_id: `rev_init_${acc.id}`,
+    amount_minor: acc.opening_balance_minor,
+    currency: acc.currency,
+    owner_user_id: acc.owner_user_id,
+    visibility: acc.visibility,
+    posting_lines: lines,
+    account_id: acc.id,
+  };
+});
+
+// Historical 6-Month Ledger Transactions (Jun 2026 to Nov 2026) for Trend Analytics
+export const HISTORICAL_SEED_TRANSACTIONS: Transaction[] = [
+  // June 2026
+  {
+    id: 'tx_hist_2026_06_inc1',
+    workspace_id: 'ws_main',
+    type: 'income',
+    description: 'June Monthly Professional Salary',
+    effective_date: '2026-06-25',
+    created_at: '2026-06-25T10:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_06_1',
+    amount_minor: 32000000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_income_salary',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_06_inc1',
+      type: 'income',
+      amountMinor: 32000000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_income_salary',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_06_inc2',
+    workspace_id: 'ws_main',
+    type: 'income',
+    description: 'Client Web Consulting Project',
+    effective_date: '2026-06-18',
+    created_at: '2026-06-18T14:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_06_2',
+    amount_minor: 6500000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_income_business',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_06_inc2',
+      type: 'income',
+      amountMinor: 6500000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_income_business',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_06_exp1',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'June Family Foodstuff & Groceries',
+    effective_date: '2026-06-08',
+    created_at: '2026-06-08T11:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_06_3',
+    amount_minor: 6200000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_food',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_06_exp1',
+      type: 'expense',
+      amountMinor: 6200000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_food',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_06_exp2',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'Commute Fuel & Monthly Servicing',
+    effective_date: '2026-06-15',
+    created_at: '2026-06-15T09:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_06_4',
+    amount_minor: 3800000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_transport',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_06_exp2',
+      type: 'expense',
+      amountMinor: 3800000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_transport',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_06_exp3',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'Power Token & High-Speed Data',
+    effective_date: '2026-06-20',
+    created_at: '2026-06-20T16:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_06_5',
+    amount_minor: 2200000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_utilities',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_06_exp3',
+      type: 'expense',
+      amountMinor: 2200000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_utilities',
+    }),
+  },
+
+  // July 2026
+  {
+    id: 'tx_hist_2026_07_inc1',
+    workspace_id: 'ws_main',
+    type: 'income',
+    description: 'July Monthly Professional Salary',
+    effective_date: '2026-07-25',
+    created_at: '2026-07-25T10:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_07_1',
+    amount_minor: 34000000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_income_salary',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_07_inc1',
+      type: 'income',
+      amountMinor: 34000000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_income_salary',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_07_exp1',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'Quarterly Estate Service Charge',
+    effective_date: '2026-07-05',
+    created_at: '2026-07-05T12:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_07_2',
+    amount_minor: 7500000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_rent',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_07_exp1',
+      type: 'expense',
+      amountMinor: 7500000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_rent',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_07_exp2',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'July Foodstuffs, Protein & Grains',
+    effective_date: '2026-07-14',
+    created_at: '2026-07-14T11:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_07_3',
+    amount_minor: 6800000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_food',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_07_exp2',
+      type: 'expense',
+      amountMinor: 6800000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_food',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_07_exp3',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'Fuel & Interstate Tolls',
+    effective_date: '2026-07-22',
+    created_at: '2026-07-22T08:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_07_4',
+    amount_minor: 4200000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_transport',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_07_exp3',
+      type: 'expense',
+      amountMinor: 4200000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_transport',
+    }),
+  },
+
+  // August 2026
+  {
+    id: 'tx_hist_2026_08_inc1',
+    workspace_id: 'ws_main',
+    type: 'income',
+    description: 'August Monthly Professional Salary',
+    effective_date: '2026-08-25',
+    created_at: '2026-08-25T10:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_08_1',
+    amount_minor: 35000000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_income_salary',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_08_inc1',
+      type: 'income',
+      amountMinor: 35000000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_income_salary',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_08_inc2',
+    workspace_id: 'ws_main',
+    type: 'income',
+    description: 'August Side Hustle & Advisory Fee',
+    effective_date: '2026-08-14',
+    created_at: '2026-08-14T15:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_08_2',
+    amount_minor: 9500000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_income_business',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_08_inc2',
+      type: 'income',
+      amountMinor: 9500000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_income_business',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_08_exp1',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'School Books & Uniforms Preparation',
+    effective_date: '2026-08-19',
+    created_at: '2026-08-19T13:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_08_3',
+    amount_minor: 5500000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_tuition',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_08_exp1',
+      type: 'expense',
+      amountMinor: 5500000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_tuition',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_08_exp2',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'August Foodstuff & Market Basket',
+    effective_date: '2026-08-11',
+    created_at: '2026-08-11T10:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_08_4',
+    amount_minor: 7200000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_food',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_08_exp2',
+      type: 'expense',
+      amountMinor: 7200000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_food',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_08_exp3',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'Commuting Fuel & Car Maintenance',
+    effective_date: '2026-08-28',
+    created_at: '2026-08-28T17:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_08_5',
+    amount_minor: 4100000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_transport',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_08_exp3',
+      type: 'expense',
+      amountMinor: 4100000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_transport',
+    }),
+  },
+
+  // September 2026
+  {
+    id: 'tx_hist_2026_09_inc1',
+    workspace_id: 'ws_main',
+    type: 'income',
+    description: 'September Monthly Professional Salary',
+    effective_date: '2026-09-25',
+    created_at: '2026-09-25T10:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_09_1',
+    amount_minor: 36000000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_income_salary',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_09_inc1',
+      type: 'income',
+      amountMinor: 36000000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_income_salary',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_09_exp1',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'First Term School Tuition & Levies',
+    effective_date: '2026-09-06',
+    created_at: '2026-09-06T09:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_09_2',
+    amount_minor: 12000000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_tuition',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_09_exp1',
+      type: 'expense',
+      amountMinor: 12000000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_tuition',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_09_exp2',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'September Foodstuffs & Protein Cart',
+    effective_date: '2026-09-15',
+    created_at: '2026-09-15T11:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_09_3',
+    amount_minor: 7400000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_food',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_09_exp2',
+      type: 'expense',
+      amountMinor: 7400000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_food',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_09_exp3',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'Transport & Commuting Fuel',
+    effective_date: '2026-09-22',
+    created_at: '2026-09-22T08:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_09_4',
+    amount_minor: 4300000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_transport',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_09_exp3',
+      type: 'expense',
+      amountMinor: 4300000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_transport',
+    }),
+  },
+
+  // October 2026
+  {
+    id: 'tx_hist_2026_10_inc1',
+    workspace_id: 'ws_main',
+    type: 'income',
+    description: 'October Monthly Professional Salary',
+    effective_date: '2026-10-25',
+    created_at: '2026-10-25T10:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_10_1',
+    amount_minor: 38000000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_income_salary',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_10_inc1',
+      type: 'income',
+      amountMinor: 38000000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_income_salary',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_10_inc2',
+    workspace_id: 'ws_main',
+    type: 'income',
+    description: 'Contract Engineering Milestone Payment',
+    effective_date: '2026-10-12',
+    created_at: '2026-10-12T14:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_10_2',
+    amount_minor: 11000000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_income_business',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_10_inc2',
+      type: 'income',
+      amountMinor: 11000000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_income_business',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_10_exp1',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'Bulk Market Food Supplies',
+    effective_date: '2026-10-09',
+    created_at: '2026-10-09T10:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_10_3',
+    amount_minor: 7600000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_food',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_10_exp1',
+      type: 'expense',
+      amountMinor: 7600000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_food',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_10_exp2',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'Fuel, Tolls & Maintenance',
+    effective_date: '2026-10-18',
+    created_at: '2026-10-18T16:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_10_4',
+    amount_minor: 4400000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_transport',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_10_exp2',
+      type: 'expense',
+      amountMinor: 4400000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_transport',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_10_exp3',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'Power Units & Fiber Internet',
+    effective_date: '2026-10-24',
+    created_at: '2026-10-24T18:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_10_5',
+    amount_minor: 2800000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_utilities',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_10_exp3',
+      type: 'expense',
+      amountMinor: 2800000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_utilities',
+    }),
+  },
+
+  // November 2026 (Current Month)
+  {
+    id: 'tx_hist_2026_11_inc1',
+    workspace_id: 'ws_main',
+    type: 'income',
+    description: 'November Primary Salary Advance',
+    effective_date: '2026-11-02',
+    created_at: '2026-11-02T10:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_11_1',
+    amount_minor: 25000000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_bank',
+    category_id: 'cat_income_salary',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_11_inc1',
+      type: 'income',
+      amountMinor: 25000000,
+      currency: 'NGN',
+      accountId: 'acc_bank',
+      categoryId: 'cat_income_salary',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_11_exp1',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'First Week Groceries & Market Restock',
+    effective_date: '2026-11-03',
+    created_at: '2026-11-03T11:00:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_11_2',
+    amount_minor: 3200000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_food',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_11_exp1',
+      type: 'expense',
+      amountMinor: 3200000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_food',
+    }),
+  },
+  {
+    id: 'tx_hist_2026_11_exp2',
+    workspace_id: 'ws_main',
+    type: 'expense',
+    description: 'Fuel Fill-Up for Commute',
+    effective_date: '2026-11-04',
+    created_at: '2026-11-04T08:30:00Z',
+    status: 'posted',
+    revision_group_id: 'rev_h_11_3',
+    amount_minor: 2500000,
+    currency: 'NGN',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    account_id: 'acc_wallet',
+    category_id: 'cat_transport',
+    posting_lines: buildPostingLinesForTemplate({
+      transactionId: 'tx_hist_2026_11_exp2',
+      type: 'expense',
+      amountMinor: 2500000,
+      currency: 'NGN',
+      accountId: 'acc_wallet',
+      categoryId: 'cat_transport',
+    }),
+  },
+];
+
+export const ALL_INITIAL_SEED_TRANSACTIONS: Transaction[] = [
+  ...initialOpeningTxs,
+  ...HISTORICAL_SEED_TRANSACTIONS,
+];
+
+// Seed Savings Goals (Section 2, 3, T-05, T-10)
+export const SEED_GOALS: SavingsGoal[] = [
+  {
+    id: 'goal_ef',
+    name: 'Emergency Fund',
+    target_amount_minor: 25000000, // ₦250,000
+    target_date: '2027-04-30',
+    access_mode: 'protected', // Protected mode (T-10)
+    is_locked: false,
+    allocation_type: 'virtual_earmark',
+    linked_account_id: 'acc_wallet',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    notes: 'Protected cushion for urgent medical or unforeseen incidents.',
+  },
+  {
+    id: 'goal_xmas',
+    name: 'Christmas & Holiday Festivities',
+    target_amount_minor: 10000000, // ₦100,000
+    target_date: '2026-12-24',
+    access_mode: 'flexible', // Flexible mode
+    is_locked: false,
+    allocation_type: 'virtual_earmark',
+    linked_account_id: 'acc_wallet',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    notes: 'Holiday celebrations, village travel and gifts.',
+  },
+  {
+    id: 'goal_land',
+    name: 'Epe Land Investment SafeLock',
+    target_amount_minor: 150000000, // ₦1.5M
+    target_date: '2027-12-31',
+    access_mode: 'locked', // Locked mode (T-10)
+    is_locked: true,
+    allocation_type: 'virtual_earmark',
+    linked_account_id: 'acc_stanbic',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    notes: 'Locked until target closing date.',
+  },
+];
+
+// Seed Goal Allocations (T-05: Emergency ₦30k + Xmas ₦20k = ₦50k in acc_wallet)
+export const SEED_ALLOCATIONS: GoalAllocation[] = [
+  {
+    id: 'ga_1',
+    goal_id: 'goal_ef',
+    account_id: 'acc_wallet',
+    allocated_minor: 3000000, // ₦30,000
+    updated_at: '2026-11-01T09:00:00Z',
+  },
+  {
+    id: 'ga_2',
+    goal_id: 'goal_xmas',
+    account_id: 'acc_wallet',
+    allocated_minor: 2000000, // ₦20,000
+    updated_at: '2026-11-01T09:00:00Z',
+  },
+  {
+    id: 'ga_3',
+    goal_id: 'goal_land',
+    account_id: 'acc_stanbic',
+    allocated_minor: 15000000, // ₦150,000
+    updated_at: '2026-11-01T09:00:00Z',
+  },
+];
+
+// Seed Commitments (Section 4, T-05: ₦40,000 in Wallet for Light Bill)
+export const SEED_COMMITMENTS: Commitment[] = [
+  {
+    id: 'com_light',
+    workspace_id: 'ws_main',
+    source_type: 'bill',
+    source_id: 'bill_nepa_nov',
+    title: 'IKEDC Monthly Electricity Bill',
+    account_id: 'acc_wallet',
+    amount_minor: 4000000, // ₦40,000 (completes T-05 Spendable = 200k - 50k - 40k = ₦110,000)
+    due_date: '2026-11-12',
+    status: 'approved',
+    category_id: 'cat_utilities',
+    created_at: '2026-11-01T10:00:00Z',
+  },
+  {
+    id: 'com_proj_gift',
+    workspace_id: 'ws_main',
+    source_type: 'project_item',
+    source_id: 'item_gift_hampers',
+    title: 'Christmas Extended Family Hampers (T-12)',
+    account_id: 'acc_bank',
+    amount_minor: 10000000, // ₦100,000 (T-12)
+    due_date: '2026-12-15',
+    status: 'approved',
+    category_id: 'cat_shopping',
+    created_at: '2026-11-01T10:00:00Z',
+  },
+];
+
+// Seed Debts (Section 8: D-1, D-2, D-3, D-4)
+export const SEED_DEBTS: Debt[] = [
+  {
+    id: 'debt_d1_chuka',
+    name: 'Brother Chuka Family Soft Loan (D-1)',
+    creditor: 'Chuka Okafor',
+    term_type: 'D-1_interest_free',
+    principal_minor: 10000000, // ₦100,000 (T-13)
+    monthly_rate_pct: 0,
+    tenure_months: 4,
+    start_date: '2026-11-01',
+    status: 'active',
+    urgency_flag: 'low',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    liability_node_id: 'node_debt_d1',
+    notes: 'Interest-free family loan. 4 monthly payments of ₦25,000.',
+  },
+  {
+    id: 'debt_d2_gtb',
+    name: 'GTBank Vehicle Asset Loan (D-2)',
+    creditor: 'GTBank SME',
+    term_type: 'D-2_reducing_balance',
+    principal_minor: 10000000, // ₦100,000 (T-14)
+    monthly_rate_pct: 3.0,
+    tenure_months: 4,
+    start_date: '2026-11-01',
+    status: 'active',
+    urgency_flag: 'medium',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    liability_node_id: 'node_debt_d2',
+    notes: 'Reducing balance at 3%/mo. Monthly equal payment ₦26,902.71; Month 4 payment ₦26,902.69 absorbs kobo residual.',
+  },
+  {
+    id: 'debt_d3_fastcash',
+    name: 'FastCredit Business Working Capital (D-3)',
+    creditor: 'FastCredit Nigeria',
+    term_type: 'D-3_flat_rate',
+    principal_minor: 10000000, // ₦100,000 (T-14)
+    monthly_rate_pct: 3.0,
+    tenure_months: 4,
+    start_date: '2026-11-01',
+    status: 'active',
+    urgency_flag: 'high',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    liability_node_id: 'node_debt_d3',
+    notes: 'Flat rate 3%/mo. Total interest ₦12,000 vs ₦7,610.82 reducing. Demonstrates stealth cost warning.',
+  },
+  {
+    id: 'debt_private_ada',
+    name: 'Personal Urgent Peer Borrowing',
+    creditor: 'Private Lender',
+    term_type: 'D-1_interest_free',
+    principal_minor: 5000000, // ₦50,000
+    monthly_rate_pct: 0,
+    tenure_months: 2,
+    start_date: '2026-11-01',
+    status: 'active',
+    urgency_flag: 'low',
+    owner_user_id: 'user_ada',
+    visibility: 'private', // T-21 Private Debt
+    liability_node_id: 'node_debt_priv',
+    notes: 'Private debt not visible to Chidi or auditor.',
+  },
+];
+
+// Seed Budgets (Section 6)
+export const SEED_BUDGETS: Budget[] = [
+  {
+    id: 'bgt_food',
+    name: 'Staple Foods Monthly Budget',
+    period: 'monthly',
+    category_id: 'cat_food',
+    limit_minor: 8000000, // ₦80,000
+    limit_version: 1,
+    exclude_project_spending: false,
+  },
+  {
+    id: 'bgt_transport',
+    name: 'Commute & Fuel Monthly Budget',
+    period: 'monthly',
+    category_id: 'cat_transport',
+    limit_minor: 4500000, // ₦45,000
+    limit_version: 1,
+    exclude_project_spending: false,
+  },
+  {
+    id: 'bgt_utilities',
+    name: 'Power & Utilities Monthly Budget',
+    period: 'monthly',
+    category_id: 'cat_utilities',
+    limit_minor: 3000000, // ₦30,000
+    limit_version: 1,
+    exclude_project_spending: false,
+  },
+  {
+    id: 'bgt_dining',
+    name: 'Dining & Entertainment Budget',
+    period: 'monthly',
+    category_id: 'cat_dining',
+    limit_minor: 2500000, // ₦25,000
+    limit_version: 1,
+    exclude_project_spending: false,
+  },
+];
+
+// Christmas Project Template (Section 17)
+export const SEED_PROJECT: Project = {
+  id: 'proj_xmas_2026',
+  title: 'Christmas 2026 Family & Village Workbook',
+  description: 'Master Christmas project plan with budget, confirmed funds, gifts, food, shopping and savings schedule.',
+  status: 'active',
+  master_budget_minor: 35000000, // ₦350,000
+  template_type: 'christmas',
+  created_at: '2026-11-01T09:00:00Z',
+};
+
+export const SEED_PROJECT_ITEMS: ProjectItem[] = [
+  { id: 'pi_1', project_id: 'proj_xmas_2026', section: 'master_budget', title: 'Approved Master Christmas Ceiling', estimated_minor: 35000000, is_paid: false },
+  { id: 'pi_2', project_id: 'proj_xmas_2026', section: 'confirmed_funds', title: 'Confirmed Savings Earmarks Available', estimated_minor: 20000000, is_paid: true },
+  { id: 'pi_3', project_id: 'proj_xmas_2026', section: 'protected_reserve', title: 'Emergency Return & Contingency Reserve', estimated_minor: 5000000, is_paid: false },
+  { id: 'pi_4', project_id: 'proj_xmas_2026', section: 'gifts', title: 'Extended Family Gift Hampers', estimated_minor: 10000000, is_paid: false, commitment_id: 'com_proj_gift' },
+  { id: 'pi_5', project_id: 'proj_xmas_2026', section: 'gifts', title: 'Children & Nieces Toy Packages', estimated_minor: 2500000, is_paid: false },
+  { id: 'pi_6', project_id: 'proj_xmas_2026', section: 'food', title: 'Live Goat & 2 Bags of Rice', estimated_minor: 12000000, is_paid: false },
+  { id: 'pi_7', project_id: 'proj_xmas_2026', section: 'shopping', title: 'Holiday Outfits & Traditional Attire', estimated_minor: 5000000, is_paid: false },
+  { id: 'pi_8', project_id: 'proj_xmas_2026', section: 'monthly_savings', title: 'November Contribution Schedule', estimated_minor: 4000000, is_paid: true },
+];
+
+interface FinanceContextType {
+  currentUser: UserProfile;
+  switchUser: (userId: string) => void;
+  accounts: Account[];
+  transactions: Transaction[];
+  categories: Category[];
+  savingsGoals: SavingsGoal[];
+  goalAllocations: GoalAllocation[];
+  commitments: Commitment[];
+  debts: Debt[];
+  budgets: Budget[];
+  budgetAlerts: BudgetAlert[];
+  projects: Project[];
+  projectItems: ProjectItem[];
+  auditLogs: AuditLog[];
+  // Actions
+  postTransaction: (tx: Omit<Transaction, 'id' | 'created_at' | 'status' | 'posting_lines'>, postingLines?: any[]) => void;
+  editTransaction: (originalTx: Transaction, updated: any) => void;
+  postGoalContribution: (goalId: string, accountId: string, amountMinor: number) => void;
+  withdrawGoalFunds: (goalId: string, accountId: string, amountMinor: number, reason: string) => { success: boolean; error?: string };
+  toggleGoalLock: (goalId: string) => void;
+  markCommitmentPaid: (commitmentId: string, categoryId: string, accountId: string) => void;
+  addAccount: (acc: Omit<Account, 'id'>) => void;
+  reconcileAccount: (accountId: string, statementBalanceMinor: number, statementDate: string) => void;
+  addBudget: (budget: Omit<Budget, 'id' | 'limit_version'>) => void;
+  updateBudgetLimit: (budgetId: string, newLimitMinor: number) => void;
+  addDebt: (debt: Omit<Debt, 'id' | 'liability_node_id' | 'status'>) => void;
+  recordDebtPayment: (debtId: string, accountId: string, amountMinor: number, interestMinor: number) => void;
+  resetToDefaultSeed: () => void;
+}
+
+const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
+
+export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState<UserProfile>(SEED_USERS[0]);
+
+  const [accounts, setAccounts] = useState<Account[]>(() => {
+    const saved = localStorage.getItem('kl_accounts');
+    return saved ? JSON.parse(saved) : SEED_ACCOUNTS;
+  });
+
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    const saved = localStorage.getItem('kl_transactions');
+    return saved ? JSON.parse(saved) : ALL_INITIAL_SEED_TRANSACTIONS;
+  });
+
+  const [categories, setCategories] = useState<Category[]>(() => {
+    const saved = localStorage.getItem('kl_categories');
+    return saved ? JSON.parse(saved) : SEED_CATEGORIES;
+  });
+
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(() => {
+    const saved = localStorage.getItem('kl_goals');
+    return saved ? JSON.parse(saved) : SEED_GOALS;
+  });
+
+  const [goalAllocations, setGoalAllocations] = useState<GoalAllocation[]>(() => {
+    const saved = localStorage.getItem('kl_allocations');
+    return saved ? JSON.parse(saved) : SEED_ALLOCATIONS;
+  });
+
+  const [commitments, setCommitments] = useState<Commitment[]>(() => {
+    const saved = localStorage.getItem('kl_commitments');
+    return saved ? JSON.parse(saved) : SEED_COMMITMENTS;
+  });
+
+  const [debts, setDebts] = useState<Debt[]>(() => {
+    const saved = localStorage.getItem('kl_debts');
+    return saved ? JSON.parse(saved) : SEED_DEBTS;
+  });
+
+  const [budgets, setBudgets] = useState<Budget[]>(() => {
+    const saved = localStorage.getItem('kl_budgets');
+    return saved ? JSON.parse(saved) : SEED_BUDGETS;
+  });
+
+  const [budgetAlerts, setBudgetAlerts] = useState<BudgetAlert[]>(() => {
+    const saved = localStorage.getItem('kl_budget_alerts');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [projects] = useState<Project[]>([SEED_PROJECT]);
+  const [projectItems, setProjectItems] = useState<ProjectItem[]>(() => {
+    const saved = localStorage.getItem('kl_project_items');
+    return saved ? JSON.parse(saved) : SEED_PROJECT_ITEMS;
+  });
+
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
+    const saved = localStorage.getItem('kl_audit_logs');
+    return saved ? JSON.parse(saved) : [
+      {
+        id: 'audit_init',
+        timestamp: new Date().toISOString(),
+        user_id: 'user_ada',
+        user_name: 'Adaeze Okafor',
+        action: 'SYSTEM_BOOTSTRAP',
+        entity_type: 'workspace',
+        entity_id: 'ws_main',
+        details: 'Initialized KoboLedger double-entry posting ledger with seed accounts and opening balances.',
+      },
+    ];
+  });
+
+  // Save changes to localStorage
+  useEffect(() => {
+    localStorage.setItem('kl_accounts', JSON.stringify(accounts));
+  }, [accounts]);
+  useEffect(() => {
+    localStorage.setItem('kl_transactions', JSON.stringify(transactions));
+  }, [transactions]);
+  useEffect(() => {
+    localStorage.setItem('kl_categories', JSON.stringify(categories));
+  }, [categories]);
+  useEffect(() => {
+    localStorage.setItem('kl_goals', JSON.stringify(savingsGoals));
+  }, [savingsGoals]);
+  useEffect(() => {
+    localStorage.setItem('kl_allocations', JSON.stringify(goalAllocations));
+  }, [goalAllocations]);
+  useEffect(() => {
+    localStorage.setItem('kl_commitments', JSON.stringify(commitments));
+  }, [commitments]);
+  useEffect(() => {
+    localStorage.setItem('kl_debts', JSON.stringify(debts));
+  }, [debts]);
+  useEffect(() => {
+    localStorage.setItem('kl_budgets', JSON.stringify(budgets));
+  }, [budgets]);
+  useEffect(() => {
+    localStorage.setItem('kl_budget_alerts', JSON.stringify(budgetAlerts));
+  }, [budgetAlerts]);
+  useEffect(() => {
+    localStorage.setItem('kl_project_items', JSON.stringify(projectItems));
+  }, [projectItems]);
+  useEffect(() => {
+    localStorage.setItem('kl_audit_logs', JSON.stringify(auditLogs));
+  }, [auditLogs]);
+
+  // Check budget thresholds on transaction updates with Deduplication Key (Section 6, T-04)
+  useEffect(() => {
+    const currentPeriod = new Date().toISOString().slice(0, 7); // '2026-11'
+    const thresholds = [50, 75, 90, 100];
+    const newAlerts: BudgetAlert[] = [];
+
+    for (const budget of budgets) {
+      let categorySpend = 0;
+      for (const tx of transactions) {
+        if (tx.status !== 'posted') continue;
+        if (!tx.effective_date.startsWith(currentPeriod)) continue;
+        if (budget.exclude_project_spending && tx.project_id) continue;
+        for (const line of tx.posting_lines) {
+          if (line.ledger_node_id === budget.category_id && line.direction === 'debit') {
+            categorySpend += line.amount_minor;
+          }
+        }
+      }
+
+      const usagePct = (categorySpend / budget.limit_minor) * 100;
+      for (const th of thresholds) {
+        if (usagePct >= th) {
+          // Stable deduplication key: budgetId + period + threshold + limitVersion (Section 6, T-04)
+          const dedupKey = `${budget.id}_${currentPeriod}_${th}_v${budget.limit_version}`;
+          const alreadyFired = budgetAlerts.some((a) => a.dedup_key === dedupKey);
+
+          if (!alreadyFired && !newAlerts.some((a) => a.dedup_key === dedupKey)) {
+            const cat = categories.find((c) => c.id === budget.category_id);
+            newAlerts.push({
+              id: `alert_${Date.now()}_${th}`,
+              dedup_key: dedupKey,
+              budget_id: budget.id,
+              period: currentPeriod,
+              threshold_pct: th,
+              limit_version: budget.limit_version,
+              timestamp: new Date().toISOString(),
+              message: `Budget Alert: ${budget.name} (${cat?.name || 'Category'}) has reached ${th}% of its ₦${(budget.limit_minor / 100).toLocaleString()} limit (current spend: ₦${(categorySpend / 100).toLocaleString()}).`,
+            });
+          }
+        }
+      }
+    }
+
+    if (newAlerts.length > 0) {
+      setBudgetAlerts((prev) => [...prev, ...newAlerts]);
+    }
+  }, [transactions, budgets, categories]);
+
+  const switchUser = (userId: string) => {
+    const found = SEED_USERS.find((u) => u.id === userId);
+    if (found) setCurrentUser(found);
+  };
+
+  const postTransaction = (
+    txData: Omit<Transaction, 'id' | 'created_at' | 'status' | 'posting_lines'>,
+    customPostingLines?: any[]
+  ) => {
+    const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const timestamp = new Date().toISOString();
+
+    const lines = customPostingLines || buildPostingLinesForTemplate({
+      transactionId: txId,
+      type: txData.type,
+      amountMinor: txData.amount_minor,
+      currency: txData.currency,
+      accountId: txData.account_id,
+      destinationAccountId: (txData as any).destination_account_id,
+      categoryId: txData.category_id,
+      debtLiabilityNodeId: (txData as any).debt_liability_node_id,
+      interestMinor: (txData as any).interest_minor,
+      feeMinor: (txData as any).fee_minor,
+    });
+
+    // Validate zero-sum
+    const validation = validateTransactionBalance(lines);
+    if (!validation.isValid) {
+      throw new Error(`Transaction rejected: ${validation.error}`);
+    }
+
+    const newTx: Transaction = {
+      ...txData,
+      id: txId,
+      created_at: timestamp,
+      status: 'posted',
+      revision_group_id: txData.revision_group_id || `rev_${txId}`,
+      owner_user_id: currentUser.id,
+      posting_lines: lines,
+    };
+
+    setTransactions((prev) => [newTx, ...prev]);
+
+    setAuditLogs((prev) => [
+      {
+        id: `audit_${Date.now()}`,
+        timestamp,
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action: 'POST_TRANSACTION',
+        entity_type: 'transaction',
+        entity_id: txId,
+        details: `Posted ${txData.type} transaction '${txData.description}' of ₦${(txData.amount_minor / 100).toLocaleString()}`,
+        revision_group_id: newTx.revision_group_id,
+      },
+      ...prev,
+    ]);
+  };
+
+  const editTransaction = (originalTx: Transaction, updated: any) => {
+    const { reversalTx, replacementTx, auditLogs: newLogs } = executeTransactionEdit(
+      originalTx,
+      updated,
+      currentUser.id,
+      currentUser.name
+    );
+
+    // Update transactions list: replace original with reversal + replacement
+    setTransactions((prev) => {
+      const filtered = prev.filter((t) => t.id !== originalTx.id);
+      return [replacementTx, reversalTx, { ...originalTx, status: 'reversed' }, ...filtered];
+    });
+
+    setAuditLogs((prev) => [...newLogs, ...prev]);
+  };
+
+  const postGoalContribution = (goalId: string, accountId: string, amountMinor: number) => {
+    // Goals are virtual earmarks, not posting lines (Section 2, INV-03)
+    setGoalAllocations((prev) => {
+      const existing = prev.find((a) => a.goal_id === goalId && a.account_id === accountId);
+      if (existing) {
+        return prev.map((a) =>
+          a.id === existing.id
+            ? { ...a, allocated_minor: a.allocated_minor + amountMinor, updated_at: new Date().toISOString() }
+            : a
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: `ga_${Date.now()}`,
+          goal_id: goalId,
+          account_id: accountId,
+          allocated_minor: amountMinor,
+          updated_at: new Date().toISOString(),
+        },
+      ];
+    });
+
+    setAuditLogs((prev) => [
+      {
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action: 'CONTRIBUTE_GOAL_EARMARK',
+        entity_type: 'savings_goal',
+        entity_id: goalId,
+        details: `Earmarked ₦${(amountMinor / 100).toLocaleString()} virtual allocation for goal from account ${accountId}`,
+      },
+      ...prev,
+    ]);
+  };
+
+  const withdrawGoalFunds = (
+    goalId: string,
+    accountId: string,
+    amountMinor: number,
+    reason: string
+  ): { success: boolean; error?: string } => {
+    const goal = savingsGoals.find((g) => g.id === goalId);
+    if (!goal) return { success: false, error: 'Goal not found' };
+
+    // T-10: Locked goals reject ordinary withdrawal until deliberately unlocked
+    if (goal.access_mode === 'locked' && goal.is_locked) {
+      return {
+        success: false,
+        error: 'Locked Goal: Ordinary withdrawal is strictly rejected while goal is in locked status. Deliberately toggle lock to unlock.',
+      };
+    }
+
+    // T-10: Protected goals require confirmation and a reason
+    if (goal.access_mode === 'protected' && (!reason || reason.trim().length === 0)) {
+      return {
+        success: false,
+        error: 'Protected Goal: A clear justification reason is mandatory to withdraw funds from this protected reserve.',
+      };
+    }
+
+    setGoalAllocations((prev) => {
+      return prev.map((a) => {
+        if (a.goal_id === goalId && a.account_id === accountId) {
+          const newAlloc = Math.max(0, a.allocated_minor - amountMinor);
+          return { ...a, allocated_minor: newAlloc, updated_at: new Date().toISOString() };
+        }
+        return a;
+      });
+    });
+
+    setAuditLogs((prev) => [
+      {
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action: 'WITHDRAW_GOAL_EARMARK',
+        entity_type: 'savings_goal',
+        entity_id: goalId,
+        details: `Withdrew ₦${(amountMinor / 100).toLocaleString()} from goal ${goal.name}. Reason: '${reason || 'Standard withdrawal'}'`,
+      },
+      ...prev,
+    ]);
+
+    return { success: true };
+  };
+
+  const toggleGoalLock = (goalId: string) => {
+    setSavingsGoals((prev) =>
+      prev.map((g) => {
+        if (g.id === goalId) {
+          const nextLocked = !g.is_locked;
+          setAuditLogs((aPrev) => [
+            {
+              id: `audit_${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              user_id: currentUser.id,
+              user_name: currentUser.name,
+              action: nextLocked ? 'LOCK_GOAL' : 'UNLOCK_GOAL',
+              entity_type: 'savings_goal',
+              entity_id: goalId,
+              details: `Deliberately set goal '${g.name}' lock status to: ${nextLocked ? 'LOCKED' : 'UNLOCKED'}`,
+            },
+            ...aPrev,
+          ]);
+          return { ...g, is_locked: nextLocked };
+        }
+        return g;
+      })
+    );
+  };
+
+  const markCommitmentPaid = (commitmentId: string, categoryId: string, accountId: string) => {
+    const com = commitments.find((c) => c.id === commitmentId);
+    if (!com) return;
+
+    // Create the actual ledger expense transaction (Section 4, INV-05, INV-06)
+    const txId = `tx_com_paid_${Date.now()}`;
+    const txLines = buildPostingLinesForTemplate({
+      transactionId: txId,
+      type: 'expense',
+      amountMinor: com.amount_minor,
+      currency: 'NGN',
+      accountId: accountId || com.account_id,
+      categoryId: categoryId || com.category_id || 'cat_utilities',
+    });
+
+    const newTx: Transaction = {
+      id: txId,
+      workspace_id: com.workspace_id,
+      type: 'expense',
+      description: `Payment for obligation: ${com.title}`,
+      effective_date: new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString(),
+      status: 'posted',
+      revision_group_id: `rev_${txId}`,
+      amount_minor: com.amount_minor,
+      currency: 'NGN',
+      owner_user_id: currentUser.id,
+      visibility: 'shared',
+      posting_lines: txLines,
+      account_id: accountId || com.account_id,
+      category_id: categoryId || com.category_id,
+    };
+
+    setTransactions((prev) => [newTx, ...prev]);
+
+    // Link commitment to transaction and mark paid
+    setCommitments((prev) =>
+      prev.map((c) =>
+        c.id === commitmentId ? { ...c, status: 'paid', linked_transaction_id: txId } : c
+      )
+    );
+
+    // If linked to project item, mark project item paid too
+    setProjectItems((prev) =>
+      prev.map((pi) => (pi.commitment_id === commitmentId ? { ...pi, is_paid: true } : pi))
+    );
+
+    setAuditLogs((prev) => [
+      {
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action: 'PAY_COMMITMENT',
+        entity_type: 'commitment',
+        entity_id: commitmentId,
+        details: `Approved commitment '${com.title}' paid via posted transaction ${txId} (₦${(com.amount_minor / 100).toLocaleString()})`,
+      },
+      ...prev,
+    ]);
+  };
+
+  const addAccount = (acc: Omit<Account, 'id'>) => {
+    const id = `acc_${Date.now()}`;
+    const newAcc: Account = { ...acc, id };
+    setAccounts((prev) => [...prev, newAcc]);
+
+    if (acc.opening_balance_minor > 0) {
+      const txLines = buildPostingLinesForTemplate({
+        transactionId: `tx_init_${id}`,
+        type: 'opening_balance',
+        amountMinor: acc.opening_balance_minor,
+        currency: acc.currency,
+        accountId: id,
+      });
+
+      const initTx: Transaction = {
+        id: `tx_init_${id}`,
+        workspace_id: 'ws_main',
+        type: 'opening_balance',
+        description: `Initial opening balance for ${acc.name}`,
+        effective_date: new Date().toISOString().split('T')[0],
+        created_at: new Date().toISOString(),
+        status: 'posted',
+        revision_group_id: `rev_init_${id}`,
+        amount_minor: acc.opening_balance_minor,
+        currency: acc.currency,
+        owner_user_id: acc.owner_user_id,
+        visibility: acc.visibility,
+        posting_lines: txLines,
+        account_id: id,
+      };
+      setTransactions((prev) => [initTx, ...prev]);
+    }
+  };
+
+  const reconcileAccount = (accountId: string, statementBalanceMinor: number, statementDate: string) => {
+    setAccounts((prev) =>
+      prev.map((a) =>
+        a.id === accountId
+          ? {
+              ...a,
+              is_reconciled: true,
+              last_reconciled_balance_minor: statementBalanceMinor,
+              last_reconciled_date: statementDate,
+            }
+          : a
+      )
+    );
+
+    setAuditLogs((prev) => [
+      {
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action: 'STATEMENT_RECONCILIATION',
+        entity_type: 'account',
+        entity_id: accountId,
+        details: `Reconciled account statement balance to ₦${(statementBalanceMinor / 100).toLocaleString()} as of ${statementDate}`,
+      },
+      ...prev,
+    ]);
+  };
+
+  const addBudget = (budget: Omit<Budget, 'id' | 'limit_version'>) => {
+    const id = `bgt_${Date.now()}`;
+    const newBgt: Budget = { ...budget, id, limit_version: 1 };
+    setBudgets((prev) => [...prev, newBgt]);
+  };
+
+  const updateBudgetLimit = (budgetId: string, newLimitMinor: number) => {
+    setBudgets((prev) =>
+      prev.map((b) => (b.id === budgetId ? { ...b, limit_minor: newLimitMinor, limit_version: b.limit_version + 1 } : b))
+    );
+  };
+
+  const addDebt = (debtData: Omit<Debt, 'id' | 'liability_node_id' | 'status'>) => {
+    const id = `debt_${Date.now()}`;
+    const liabilityNodeId = `node_liability_${id}`;
+    const newDebt: Debt = {
+      ...debtData,
+      id,
+      liability_node_id: liabilityNodeId,
+      status: 'active',
+    };
+    setDebts((prev) => [...prev, newDebt]);
+
+    // Record drawdown transaction (Section 2)
+    // Debit Bank, Debit Fee (if any), Credit Liability
+    const drawdownTxId = `tx_dd_${id}`;
+    const feeMinor = debtData.drawdown_fee_minor || 0;
+    const defaultBank = accounts.find((a) => a.type === 'bank') || accounts[0];
+
+    const lines = buildPostingLinesForTemplate({
+      transactionId: drawdownTxId,
+      type: 'debt_drawdown',
+      amountMinor: debtData.principal_minor,
+      currency: 'NGN',
+      accountId: defaultBank.id,
+      debtLiabilityNodeId: liabilityNodeId,
+      feeMinor,
+    });
+
+    const tx: Transaction = {
+      id: drawdownTxId,
+      workspace_id: 'ws_main',
+      type: 'debt_drawdown',
+      description: `Loan Drawdown: ${debtData.name} from ${debtData.creditor}`,
+      effective_date: debtData.start_date,
+      created_at: new Date().toISOString(),
+      status: 'posted',
+      revision_group_id: `rev_${drawdownTxId}`,
+      amount_minor: debtData.principal_minor,
+      currency: 'NGN',
+      owner_user_id: debtData.owner_user_id,
+      visibility: debtData.visibility,
+      posting_lines: lines,
+      account_id: defaultBank.id,
+    };
+
+    setTransactions((prev) => [tx, ...prev]);
+
+    setAuditLogs((prev) => [
+      {
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action: 'DEBT_DRAWDOWN',
+        entity_type: 'debt',
+        entity_id: id,
+        details: `Recorded loan drawdown for ${debtData.name} (Principal ₦${(debtData.principal_minor / 100).toLocaleString()})`,
+      },
+      ...prev,
+    ]);
+  };
+
+  const recordDebtPayment = (
+    debtId: string,
+    accountId: string,
+    amountMinor: number,
+    interestMinor: number
+  ) => {
+    const debt = debts.find((d) => d.id === debtId);
+    if (!debt) return;
+
+    const txId = `tx_repay_${Date.now()}`;
+    const lines = buildPostingLinesForTemplate({
+      transactionId: txId,
+      type: 'debt_repayment',
+      amountMinor,
+      currency: 'NGN',
+      accountId,
+      debtLiabilityNodeId: debt.liability_node_id,
+      interestMinor,
+    });
+
+    const tx: Transaction = {
+      id: txId,
+      workspace_id: 'ws_main',
+      type: 'debt_repayment',
+      description: `Loan Repayment: ${debt.name} (${debt.creditor})`,
+      effective_date: new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString(),
+      status: 'posted',
+      revision_group_id: `rev_${txId}`,
+      amount_minor: amountMinor,
+      currency: 'NGN',
+      owner_user_id: currentUser.id,
+      visibility: debt.visibility,
+      posting_lines: lines,
+      account_id: accountId,
+    };
+
+    setTransactions((prev) => [tx, ...prev]);
+
+    setAuditLogs((prev) => [
+      {
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action: 'DEBT_REPAYMENT',
+        entity_type: 'debt',
+        entity_id: debtId,
+        details: `Recorded debt repayment of ₦${(amountMinor / 100).toLocaleString()} (Principal: ₦${((amountMinor - interestMinor) / 100).toLocaleString()}, Interest: ₦${(interestMinor / 100).toLocaleString()})`,
+      },
+      ...prev,
+    ]);
+  };
+
+  const resetToDefaultSeed = () => {
+    localStorage.clear();
+    setAccounts(SEED_ACCOUNTS);
+    setTransactions(ALL_INITIAL_SEED_TRANSACTIONS);
+    setCategories(SEED_CATEGORIES);
+    setSavingsGoals(SEED_GOALS);
+    setGoalAllocations(SEED_ALLOCATIONS);
+    setCommitments(SEED_COMMITMENTS);
+    setDebts(SEED_DEBTS);
+    setBudgets(SEED_BUDGETS);
+    setBudgetAlerts([]);
+    setProjectItems(SEED_PROJECT_ITEMS);
+    setAuditLogs([
+      {
+        id: `audit_reset_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action: 'SYSTEM_RESET',
+        entity_type: 'workspace',
+        entity_id: 'ws_main',
+        details: 'Reset KoboLedger database to clean default seed state.',
+      },
+    ]);
+  };
+
+  return (
+    <FinanceContext.Provider
+      value={{
+        currentUser,
+        switchUser,
+        accounts,
+        transactions,
+        categories,
+        savingsGoals,
+        goalAllocations,
+        commitments,
+        debts,
+        budgets,
+        budgetAlerts,
+        projects,
+        projectItems,
+        auditLogs,
+        postTransaction,
+        editTransaction,
+        postGoalContribution,
+        withdrawGoalFunds,
+        toggleGoalLock,
+        markCommitmentPaid,
+        addAccount,
+        reconcileAccount,
+        addBudget,
+        updateBudgetLimit,
+        addDebt,
+        recordDebtPayment,
+        resetToDefaultSeed,
+      }}
+    >
+      {children}
+    </FinanceContext.Provider>
+  );
+};
+
+export const useFinance = () => {
+  const ctx = useContext(FinanceContext);
+  if (!ctx) throw new Error('useFinance must be used within FinanceProvider');
+  return ctx;
+};

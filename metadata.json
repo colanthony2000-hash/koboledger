@@ -1,0 +1,6 @@
+{
+  "name": "KoboLedger - Personal & Household Finance Platform",
+  "description": "Production-grade personal and household finance platform featuring double-entry posting-line ledger, Nigerian quick-add parser, multi-tier debt engine, budget alerts, and privacy-first commitments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
