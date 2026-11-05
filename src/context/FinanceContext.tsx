@@ -21,6 +21,8 @@ import {
   Transaction,
   UserProfile,
   UserSubscription,
+  RecurringTransaction,
+  DailySavingsSetting,
 } from '../types/finance';
 import {
   buildPostingLinesForTemplate,
@@ -47,11 +49,134 @@ import {
 } from '../services/firebaseSync';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
-// Seed Users for Household Sharing (Section 5, T-21)
+// Seed Users for Household Sharing & Corporate Audit (Section 5, T-21)
 export const SEED_USERS: UserProfile[] = [
-  { id: 'user_ada', name: 'Adaeze Okafor', role: 'owner', avatar_initials: 'AO' },
-  { id: 'user_chidi', name: 'Chidi Okafor', role: 'member', avatar_initials: 'CO' },
-  { id: 'user_auditor', name: 'Auditor (External)', role: 'auditor', avatar_initials: 'AU' },
+  {
+    id: 'user_ada',
+    name: 'Adaeze Okafor',
+    role: 'owner',
+    avatar_initials: 'AO',
+    email: 'adaeze.okafor@jeneconk.com',
+    workspace_id: 'ws_household_jeneconk_01',
+    workspace_type: 'household',
+    subscription: {
+      tier: 'pro',
+      billingCycle: 'monthly',
+      status: 'active',
+      paymentMethod: 'paystack',
+    },
+    details: {
+      designation: 'Head of Household & Managing Director',
+      department: 'Family Office & Executive Corporate Governance',
+      affiliation: 'JENECONK INTEGRATED GLOBAL SOLUTIONS LIMITED',
+      email: 'adaeze.okafor@jeneconk.com',
+      phoneNumber: '+234 803 555 0192',
+      workspaceType: 'household',
+      workspaceName: 'Okafor Family Office & Treasury',
+      scopeDescription: 'Primary administrative authority over all shared accounts, private savings, corporate bank linking (Wema Bank 0128077067), master budgets, debt management, and subscription billing.',
+      permissions: {
+        canPostTransactions: true,
+        canReverseTransactions: true,
+        canManageAccounts: true,
+        canViewPrivateRecords: true,
+        canManageBudgets: true,
+        canManageSavings: true,
+        canManageDebts: true,
+        canManageSubscriptions: true,
+        canExportAuditStatements: true,
+        canReconcileAccounts: true,
+        isReadOnly: false,
+      },
+      assignedAccounts: [
+        'GTBank Main Salary Current',
+        'Daily Cash Wallet',
+        'Stanbic Wealth Savings',
+        'Piggyvest SafeLock (Private Vault)',
+      ],
+    },
+  },
+  {
+    id: 'user_chidi',
+    name: 'Chidi Okafor',
+    role: 'member',
+    avatar_initials: 'CO',
+    email: 'chidi.okafor@gmail.com',
+    workspace_id: 'ws_household_jeneconk_01',
+    workspace_type: 'household',
+    subscription: {
+      tier: 'free',
+      status: 'free',
+    },
+    details: {
+      designation: 'Household Associate & Logistics Manager',
+      department: 'Household Daily Operations & Grocery Logistics',
+      affiliation: 'Okafor Household Workspace',
+      email: 'chidi.okafor@gmail.com',
+      phoneNumber: '+234 812 444 8820',
+      workspaceType: 'household',
+      workspaceName: 'Okafor Family Office & Treasury',
+      scopeDescription: 'Authorized to record shared grocery, utility, and commute expenses via Kuda Mobile Money and Daily Cash Wallet. Private savings reserves, owner debts, and confidential wealth accounts are strictly restricted and hidden.',
+      permissions: {
+        canPostTransactions: true,
+        canReverseTransactions: false,
+        canManageAccounts: false,
+        canViewPrivateRecords: false,
+        canManageBudgets: false,
+        canManageSavings: false,
+        canManageDebts: false,
+        canManageSubscriptions: false,
+        canExportAuditStatements: false,
+        canReconcileAccounts: false,
+        isReadOnly: false,
+      },
+      assignedAccounts: [
+        'Kuda Mobile Money',
+        'Daily Cash Wallet',
+      ],
+    },
+  },
+  {
+    id: 'user_auditor',
+    name: 'Babajide Adeleke, FCA',
+    role: 'auditor',
+    avatar_initials: 'BA',
+    email: 'b.adeleke@ernstaudit-ng.com',
+    workspace_id: 'ws_household_jeneconk_01',
+    workspace_type: 'company',
+    subscription: {
+      tier: 'pro',
+      status: 'active',
+    },
+    details: {
+      designation: 'Independent Financial Auditor & Compliance Officer',
+      department: 'Statutory Financial Assurance & Invariant Verification',
+      affiliation: 'Ernst & Audit Compliance Consultants (ICAN #ICAN/2024/9821)',
+      email: 'b.adeleke@ernstaudit-ng.com',
+      phoneNumber: '+234 802 119 7300',
+      workspaceType: 'company',
+      workspaceName: 'JENECONK & Okafor Financial Audit',
+      scopeDescription: 'Independent read-only supervisory access to all shared general ledger postings, double-entry equality invariants (INV-01 to INV-13), bank reconciliations, and official PDF/CSV statement certification. Write, edit, and deletion privileges are strictly prohibited.',
+      permissions: {
+        canPostTransactions: false,
+        canReverseTransactions: false,
+        canManageAccounts: false,
+        canViewPrivateRecords: false,
+        canManageBudgets: false,
+        canManageSavings: false,
+        canManageDebts: false,
+        canManageSubscriptions: false,
+        canExportAuditStatements: true,
+        canReconcileAccounts: true,
+        isReadOnly: true,
+      },
+      assignedAccounts: [
+        'GTBank Main Salary Current',
+        'Daily Cash Wallet',
+        'Kuda Mobile Money',
+        'Stanbic Wealth Savings (Audit View)',
+      ],
+    },
+  },
 ];
 
 // Seed Categories
@@ -1041,6 +1166,77 @@ export const SEED_PROJECT_ITEMS: ProjectItem[] = [
   { id: 'pi_8', project_id: 'proj_xmas_2026', section: 'monthly_savings', title: 'November Contribution Schedule', estimated_minor: 4000000, is_paid: true },
 ];
 
+export const SEED_RECURRING: RecurringTransaction[] = [
+  {
+    id: 'rec_salary',
+    description: 'Monthly Engineering & Consulting Salary',
+    amount_minor: 35000000, // ₦350,000
+    currency: 'NGN',
+    type: 'income',
+    interval: 'monthly',
+    account_id: 'acc_bank',
+    category_id: 'cat_income_salary',
+    next_due_date: '2026-11-25',
+    status: 'active',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    created_at: '2026-10-01T08:00:00Z',
+  },
+  {
+    id: 'rec_internet',
+    description: 'Fiber Internet & Power Token Recurring Subscription',
+    amount_minor: 2500000, // ₦25,000
+    currency: 'NGN',
+    type: 'expense',
+    interval: 'monthly',
+    account_id: 'acc_bank',
+    category_id: 'cat_utilities',
+    next_due_date: '2026-11-15',
+    status: 'active',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    created_at: '2026-10-01T08:00:00Z',
+  },
+  {
+    id: 'rec_groceries',
+    description: 'Weekly Staple Food & Protein Provisions',
+    amount_minor: 2000000, // ₦20,000
+    currency: 'NGN',
+    type: 'expense',
+    interval: 'weekly',
+    account_id: 'acc_wallet',
+    category_id: 'cat_food',
+    next_due_date: '2026-11-08',
+    status: 'active',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    created_at: '2026-10-01T08:00:00Z',
+  },
+  {
+    id: 'rec_transport',
+    description: 'Daily Commute & Vehicle Fuel Allowance',
+    amount_minor: 250000, // ₦2,500
+    currency: 'NGN',
+    type: 'expense',
+    interval: 'daily',
+    account_id: 'acc_wallet',
+    category_id: 'cat_transport',
+    next_due_date: '2026-11-05',
+    status: 'active',
+    owner_user_id: 'user_ada',
+    visibility: 'shared',
+    created_at: '2026-10-01T08:00:00Z',
+  },
+];
+
+export const DEFAULT_DAILY_SAVINGS: DailySavingsSetting = {
+  target_minor: 200000, // ₦2,000 daily target
+  saved_today_minor: 150000, // ₦1,500 saved today
+  last_reset_date: '2026-11-05',
+  target_goal_id: 'goal_emergency',
+  streak_days: 5,
+};
+
 interface FinanceContextType {
   currentUser: UserProfile;
   switchUser: (userId: string) => void;
@@ -1056,6 +1252,16 @@ interface FinanceContextType {
   projects: Project[];
   projectItems: ProjectItem[];
   auditLogs: AuditLog[];
+  // Recurring Transactions
+  recurringTransactions: RecurringTransaction[];
+  addRecurringTransaction: (rec: Omit<RecurringTransaction, 'id' | 'created_at' | 'status'>) => void;
+  updateRecurringTransaction: (id: string, updates: Partial<RecurringTransaction>) => void;
+  deleteRecurringTransaction: (id: string) => void;
+  executeRecurringTransaction: (id: string) => void;
+  // Daily Savings Target
+  dailySavings: DailySavingsSetting;
+  updateDailySavingsTarget: (targetMinor: number) => void;
+  recordDailySavingsDeposit: (amountMinor: number, goalId?: string) => void;
   // Subscription & Commercial Tier
   subscription: UserSubscription;
   updateSubscription: (sub: Partial<UserSubscription>) => void;
@@ -1064,6 +1270,11 @@ interface FinanceContextType {
   openSubscriptionModal: (featureReason?: string) => void;
   closeSubscriptionModal: () => void;
   requestedFeature: string | undefined;
+  // User Profile & Role Matrix Modal
+  isUserProfileModalOpen: boolean;
+  openUserProfileModal: (user?: UserProfile) => void;
+  closeUserProfileModal: () => void;
+  selectedUserProfile: UserProfile | null;
   // Firebase Auth & Live Sync State (Phase 1)
   firebaseUser: FirebaseUser | null;
   isFirebaseConnected: boolean;
@@ -1158,6 +1369,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ];
   });
 
+  // Recurring Transactions State
+  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>(() => {
+    const saved = localStorage.getItem('kl_recurring');
+    return saved ? JSON.parse(saved) : SEED_RECURRING;
+  });
+
+  // Daily Savings Setting State
+  const [dailySavings, setDailySavings] = useState<DailySavingsSetting>(() => {
+    const saved = localStorage.getItem('kl_daily_savings');
+    return saved ? JSON.parse(saved) : DEFAULT_DAILY_SAVINGS;
+  });
+
   // Subscription State & Commercial Monetization
   const [subscription, setSubscription] = useState<UserSubscription>(() => {
     const saved = localStorage.getItem('kl_subscription');
@@ -1179,6 +1402,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const closeSubscriptionModal = () => {
     setIsSubscriptionModalOpen(false);
     setRequestedFeature(undefined);
+  };
+
+  // User Profile & Role Matrix Modal State
+  const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
+  const [selectedUserProfile, setSelectedUserProfile] = useState<UserProfile | null>(null);
+
+  const openUserProfileModal = (user?: UserProfile) => {
+    setSelectedUserProfile(user || currentUser);
+    setIsUserProfileModalOpen(true);
+  };
+
+  const closeUserProfileModal = () => {
+    setIsUserProfileModalOpen(false);
+    setSelectedUserProfile(null);
   };
 
   const updateSubscription = (sub: Partial<UserSubscription>) => {
@@ -1248,11 +1485,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => unsubscribe();
   }, []);
 
-  // Real-time Firestore transaction sync
+  // Real-time Firestore transaction sync with scoped query (INV-01, Rules-Compliant)
   useEffect(() => {
     if (!firebaseUser) return;
     setIsSyncing(true);
-    const unsub = listenToTransactions((remoteTxs) => {
+    const userId = firebaseUser.uid;
+    const unsub = listenToTransactions(userId, (remoteTxs) => {
       setIsSyncing(false);
       if (remoteTxs && remoteTxs.length > 0) {
         setTransactions(remoteTxs);
@@ -1365,13 +1603,22 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const switchUser = (userId: string) => {
     const found = SEED_USERS.find((u) => u.id === userId);
-    if (found) setCurrentUser(found);
+    if (found) {
+      setCurrentUser(found);
+      if (selectedUserProfile) {
+        setSelectedUserProfile(found);
+      }
+    }
   };
 
   const postTransaction = (
     txData: Omit<Transaction, 'id' | 'created_at' | 'status' | 'posting_lines'>,
     customPostingLines?: any[]
   ) => {
+    if (currentUser.role === 'auditor') {
+      throw new Error('Auditor role is restricted to read-only attestation. Creating transactions is prohibited.');
+    }
+
     const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const timestamp = new Date().toISOString();
 
@@ -1819,6 +2066,115 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ]);
   };
 
+  // Recurring Transactions Handlers
+  const addRecurringTransaction = (rec: Omit<RecurringTransaction, 'id' | 'created_at' | 'status'>) => {
+    const newRec: RecurringTransaction = {
+      ...rec,
+      id: `rec_${Date.now()}`,
+      status: 'active',
+      created_at: new Date().toISOString(),
+    };
+    setRecurringTransactions((prev) => {
+      const updated = [newRec, ...prev];
+      localStorage.setItem('kl_recurring', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const updateRecurringTransaction = (id: string, updates: Partial<RecurringTransaction>) => {
+    setRecurringTransactions((prev) => {
+      const updated = prev.map((r) => (r.id === id ? { ...r, ...updates } : r));
+      localStorage.setItem('kl_recurring', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const deleteRecurringTransaction = (id: string) => {
+    setRecurringTransactions((prev) => {
+      const updated = prev.filter((r) => r.id !== id);
+      localStorage.setItem('kl_recurring', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const executeRecurringTransaction = (id: string) => {
+    const rec = recurringTransactions.find((r) => r.id === id);
+    if (!rec) return;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const postingLines = buildPostingLinesForTemplate({
+      transactionId: `tx_rec_${Date.now()}`,
+      type: rec.type,
+      amountMinor: rec.amount_minor,
+      currency: rec.currency,
+      accountId: rec.account_id,
+      categoryId: rec.category_id,
+      destinationAccountId: rec.destination_account_id,
+    });
+
+    postTransaction(
+      {
+        workspace_id: 'ws_main',
+        type: rec.type,
+        revision_group_id: `rev_rec_${Date.now()}`,
+        description: `[Scheduled ${rec.interval}] ${rec.description}`,
+        effective_date: todayStr,
+        amount_minor: rec.amount_minor,
+        currency: rec.currency,
+        owner_user_id: rec.owner_user_id,
+        visibility: rec.visibility,
+        account_id: rec.account_id,
+        category_id: rec.category_id,
+      },
+      postingLines
+    );
+
+    // Calculate next due date
+    const currentDate = new Date(rec.next_due_date || todayStr);
+    const nextDate = new Date(currentDate);
+    if (rec.interval === 'daily') {
+      nextDate.setDate(nextDate.getDate() + 1);
+    } else if (rec.interval === 'weekly') {
+      nextDate.setDate(nextDate.getDate() + 7);
+    } else {
+      nextDate.setMonth(nextDate.getMonth() + 1);
+    }
+
+    updateRecurringTransaction(id, {
+      next_due_date: nextDate.toISOString().split('T')[0],
+      last_executed_date: todayStr,
+    });
+  };
+
+  // Daily Savings Handlers
+  const updateDailySavingsTarget = (targetMinor: number) => {
+    setDailySavings((prev) => {
+      const updated = { ...prev, target_minor: targetMinor };
+      localStorage.setItem('kl_daily_savings', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const recordDailySavingsDeposit = (amountMinor: number, goalId?: string) => {
+    const targetGoal = savingsGoals.find((g) => g.id === goalId) || savingsGoals[0];
+    if (targetGoal) {
+      postGoalContribution(targetGoal.id, targetGoal.linked_account_id, amountMinor);
+    }
+
+    setDailySavings((prev) => {
+      const newSaved = prev.saved_today_minor + amountMinor;
+      const isTargetMet = newSaved >= prev.target_minor;
+      const updated: DailySavingsSetting = {
+        ...prev,
+        saved_today_minor: newSaved,
+        streak_days: isTargetMet ? (prev.saved_today_minor < prev.target_minor ? prev.streak_days + 1 : prev.streak_days) : prev.streak_days,
+      };
+      localStorage.setItem('kl_daily_savings', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const resetToDefaultSeed = () => {
     localStorage.clear();
     setAccounts(SEED_ACCOUNTS);
@@ -1831,6 +2187,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setBudgets(SEED_BUDGETS);
     setBudgetAlerts([]);
     setProjectItems(SEED_PROJECT_ITEMS);
+    setRecurringTransactions(SEED_RECURRING);
+    setDailySavings(DEFAULT_DAILY_SAVINGS);
     setAuditLogs([
       {
         id: `audit_reset_${Date.now()}`,
@@ -1862,6 +2220,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         projects,
         projectItems,
         auditLogs,
+        recurringTransactions,
+        addRecurringTransaction,
+        updateRecurringTransaction,
+        deleteRecurringTransaction,
+        executeRecurringTransaction,
+        dailySavings,
+        updateDailySavingsTarget,
+        recordDailySavingsDeposit,
         subscription,
         updateSubscription,
         isFeatureAllowed,
@@ -1869,6 +2235,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         openSubscriptionModal,
         closeSubscriptionModal,
         requestedFeature,
+        isUserProfileModalOpen,
+        openUserProfileModal,
+        closeUserProfileModal,
+        selectedUserProfile,
         firebaseUser,
         isFirebaseConnected,
         isSyncing,

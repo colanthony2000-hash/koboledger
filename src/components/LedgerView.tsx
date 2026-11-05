@@ -19,7 +19,11 @@ import {
   X,
   CreditCard,
   Building,
+  Repeat,
+  Printer,
 } from 'lucide-react';
+import { ExportLedgerModal } from './ExportLedgerModal';
+import { RecurringTransactionsModal } from './RecurringTransactionsModal';
 
 export const LedgerView: React.FC = () => {
   const { transactions, accounts, categories, currentUser, editTransaction } = useFinance();
@@ -27,6 +31,8 @@ export const LedgerView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
 
   // Edit Modal State (Section 6, T-02)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -168,13 +174,23 @@ export const LedgerView: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={handleExportCSV}
-          className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all shadow-xs cursor-pointer self-start sm:self-auto"
-        >
-          <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-          <span>Export Clean CSV</span>
-        </button>
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <button
+            onClick={() => setIsRecurringModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all shadow-xs cursor-pointer"
+          >
+            <Repeat className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>Recurring</span>
+          </button>
+
+          <button
+            onClick={() => setIsExportModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-xl hover:opacity-90 transition-all shadow-xs cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-400 dark:text-emerald-600" />
+            <span>Export Records (CSV & PDF)</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -518,6 +534,16 @@ export const LedgerView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Export & Recurring Modals */}
+      <ExportLedgerModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+      />
+
+      <RecurringTransactionsModal
+        isOpen={isRecurringModalOpen}
+        onClose={() => setIsRecurringModalOpen(false)}
+      />
     </div>
   );
 };

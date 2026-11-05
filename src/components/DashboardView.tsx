@@ -20,6 +20,7 @@ import {
   Shield,
   Layers,
   Crown,
+  Repeat,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -32,6 +33,9 @@ import {
   Tooltip,
   Legend,
 } from 'recharts';
+import { DailySavingsCard } from './DailySavingsCard';
+import { FinancialHealthScoreCard } from './FinancialHealthScoreCard';
+import { RecurringTransactionsModal } from './RecurringTransactionsModal';
 
 interface DashboardViewProps {
   onOpenQuickAdd: () => void;
@@ -99,10 +103,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
     debts,
     subscription,
     openSubscriptionModal,
+    openUserProfileModal,
   } = useFinance();
 
   const [showNetMarginLine, setShowNetMarginLine] = useState(true);
   const [showMathProof, setShowMathProof] = useState(false);
+  const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
 
   // Time-sensitive greeting
   const greeting = useMemo(() => {
@@ -266,31 +272,70 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 uppercase tracking-widest font-mono">
+            <div className="flex items-center gap-2 flex-wrap text-xs font-semibold uppercase tracking-wider font-mono">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Treasury Operations · Household Active</span>
+              <span className="text-emerald-400">
+                {currentUser.details?.workspaceName || 'Okafor Family Office & Treasury'}
+              </span>
+              <span className="text-slate-500">·</span>
+              <button
+                onClick={() => openUserProfileModal(currentUser)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 text-slate-200 transition-colors cursor-pointer text-[10px] lowercase capitalize font-sans font-bold"
+                title="View Role & Scope Matrix"
+              >
+                <span>{currentUser.details?.designation || currentUser.role}</span>
+                <ChevronRight className="w-3 h-3 text-slate-400" />
+              </button>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               {greeting}, {currentUser.name.split(' ')[0]}
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
-              Your double-entry posting ledger is reconciled with zero imbalances. Spendable liquidity is calculated after all earmarked savings and commitments.
+              {currentUser.role === 'auditor'
+                ? 'Independent statutory audit perspective. You have read-only supervisory access to all shared general ledger postings and accounting invariants.'
+                : currentUser.role === 'member'
+                ? 'Household logistics workspace. Access to shared daily cash and Kuda mobile money accounts for grocery and upkeep tracking.'
+                : 'Master treasury workspace with administrative authority over all shared accounts, private vaults, corporate linking, and budgets.'}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button
+              onClick={() => openUserProfileModal(currentUser)}
+              className="px-3 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-white/10 hover:bg-white/15 rounded-xl backdrop-blur-md transition-colors border border-white/10 cursor-pointer flex items-center gap-1.5"
+            >
+              <Shield className="w-3.5 h-3.5 text-amber-400" />
+              <span>Role Matrix</span>
+            </button>
+            <button
+              onClick={() => setIsRecurringModalOpen(true)}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-white/10 hover:bg-white/15 rounded-xl backdrop-blur-md transition-colors border border-white/10 cursor-pointer flex items-center gap-1.5"
+            >
+              <Repeat className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Recurring</span>
+            </button>
             <button
               onClick={() => onNavigate('ledger')}
               className="px-4 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-white/10 hover:bg-white/15 rounded-xl backdrop-blur-md transition-colors border border-white/10 cursor-pointer"
             >
               Inspect Ledger
             </button>
-            <button
-              onClick={onOpenQuickAdd}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-900 bg-white hover:bg-slate-100 rounded-xl shadow-[0_4px_16px_rgba(255,255,255,0.2)] transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <span>+ Quick Entry</span>
-            </button>
+            {currentUser.role === 'auditor' ? (
+              <button
+                onClick={() => onNavigate('tests')}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-[0_4px_16px_rgba(147,51,234,0.3)] transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Audit Invariants</span>
+              </button>
+            ) : (
+              <button
+                onClick={onOpenQuickAdd}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-900 bg-white hover:bg-slate-100 rounded-xl shadow-[0_4px_16px_rgba(255,255,255,0.2)] transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <span>+ Quick Entry</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -389,6 +434,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
           </div>
         </div>
+      </div>
+
+      {/* Daily Savings Target & Financial Health Score */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <DailySavingsCard />
+        <FinancialHealthScoreCard onNavigate={onNavigate} />
       </div>
 
       {/* Alluring Pro Upgrade Banner for Free Users */}
@@ -838,6 +889,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
           </div>
         </div>
       </div>
+
+      {/* Recurring Transactions Manager Modal */}
+      <RecurringTransactionsModal
+        isOpen={isRecurringModalOpen}
+        onClose={() => setIsRecurringModalOpen(false)}
+      />
     </div>
   );
 };

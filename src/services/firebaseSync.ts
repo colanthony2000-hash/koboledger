@@ -24,7 +24,14 @@ import {
 export async function persistTransaction(tx: Transaction): Promise<void> {
   const collectionName = 'transactions';
   try {
-    await setDoc(doc(db, collectionName, tx.id), tx);
+    const sharedWith = tx.visibility === 'shared'
+      ? Array.from(new Set([tx.owner_user_id, 'user_ada', 'user_chidi', 'user_auditor']))
+      : [tx.owner_user_id];
+
+    await setDoc(doc(db, collectionName, tx.id), {
+      ...tx,
+      sharedWith,
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${collectionName}/${tx.id}`);
   }
@@ -36,7 +43,14 @@ export async function persistTransaction(tx: Transaction): Promise<void> {
 export async function persistAccount(acc: Account): Promise<void> {
   const collectionName = 'accounts';
   try {
-    await setDoc(doc(db, collectionName, acc.id), acc);
+    const sharedWith = acc.visibility === 'shared'
+      ? Array.from(new Set([acc.owner_user_id, 'user_ada', 'user_chidi', 'user_auditor']))
+      : [acc.owner_user_id];
+
+    await setDoc(doc(db, collectionName, acc.id), {
+      ...acc,
+      sharedWith,
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${collectionName}/${acc.id}`);
   }
@@ -48,7 +62,14 @@ export async function persistAccount(acc: Account): Promise<void> {
 export async function persistDebt(debt: Debt): Promise<void> {
   const collectionName = 'debts';
   try {
-    await setDoc(doc(db, collectionName, debt.id), debt);
+    const sharedWith = debt.visibility === 'shared'
+      ? Array.from(new Set([debt.owner_user_id, 'user_ada', 'user_chidi', 'user_auditor']))
+      : [debt.owner_user_id];
+
+    await setDoc(doc(db, collectionName, debt.id), {
+      ...debt,
+      sharedWith,
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${collectionName}/${debt.id}`);
   }
@@ -57,10 +78,16 @@ export async function persistDebt(debt: Debt): Promise<void> {
 /**
  * Persists a budget to Firestore
  */
-export async function persistBudget(budget: Budget): Promise<void> {
+export async function persistBudget(budget: Budget & { owner_user_id?: string; workspace_id?: string; visibility?: string }): Promise<void> {
   const collectionName = 'budgets';
+  const ownerId = budget.owner_user_id || 'user_ada';
   try {
-    await setDoc(doc(db, collectionName, budget.id), budget);
+    await setDoc(doc(db, collectionName, budget.id), {
+      ...budget,
+      owner_user_id: ownerId,
+      workspace_id: budget.workspace_id || 'ws_household_jeneconk_01',
+      sharedWith: ['user_ada', 'user_chidi', 'user_auditor'],
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${collectionName}/${budget.id}`);
   }
@@ -72,7 +99,14 @@ export async function persistBudget(budget: Budget): Promise<void> {
 export async function persistSavingsGoal(goal: SavingsGoal): Promise<void> {
   const collectionName = 'savings_goals';
   try {
-    await setDoc(doc(db, collectionName, goal.id), goal);
+    const sharedWith = goal.visibility === 'shared'
+      ? Array.from(new Set([goal.owner_user_id, 'user_ada', 'user_chidi', 'user_auditor']))
+      : [goal.owner_user_id];
+
+    await setDoc(doc(db, collectionName, goal.id), {
+      ...goal,
+      sharedWith,
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${collectionName}/${goal.id}`);
   }
@@ -81,10 +115,15 @@ export async function persistSavingsGoal(goal: SavingsGoal): Promise<void> {
 /**
  * Persists a commitment obligation to Firestore
  */
-export async function persistCommitment(commitment: Commitment): Promise<void> {
+export async function persistCommitment(commitment: Commitment & { owner_user_id?: string }): Promise<void> {
   const collectionName = 'commitments';
+  const ownerId = commitment.owner_user_id || 'user_ada';
   try {
-    await setDoc(doc(db, collectionName, commitment.id), commitment);
+    await setDoc(doc(db, collectionName, commitment.id), {
+      ...commitment,
+      owner_user_id: ownerId,
+      sharedWith: ['user_ada', 'user_chidi', 'user_auditor'],
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${collectionName}/${commitment.id}`);
   }
@@ -101,10 +140,12 @@ export async function persistUserProfile(user: UserProfile & { email?: string; p
       {
         uid: user.id,
         displayName: user.name,
-        role: user.role === 'owner' ? 'head' : 'member',
-        workspaceId: 'ws_main',
-        email: user.email || 'user@koboledger.app',
+        role: user.role,
+        workspaceId: user.workspace_id || 'ws_household_jeneconk_01',
+        workspaceType: user.workspace_type || 'household',
+        email: user.email || `${user.id}@koboledger.app`,
         photoURL: user.photoURL || '',
+        details: user.details || null,
         updatedAt: new Date().toISOString(),
       },
       { merge: true }
@@ -126,10 +167,9 @@ export async function seedInitialFirestoreData(data: {
   commitments: Commitment[];
 }): Promise<void> {
   try {
-    // Check if transactions already exist in Firestore
     const txSnap = await getDocs(collection(db, 'transactions'));
     if (txSnap.size === 0) {
-      console.log('Seeding initial ledger data to Firestore...');
+      console.log('Seeding initial ledger data to Firestore with scoped ownership...');
       for (const a of data.accounts) {
         await persistAccount(a);
       }
@@ -156,12 +196,17 @@ export async function seedInitialFirestoreData(data: {
 }
 
 /**
- * Sets up real-time listener on transactions with proper error handler
+ * Sets up real-time listener on transactions with scoped query for security rules compliance
  */
-export function listenToTransactions(onUpdate: (txs: Transaction[]) => void) {
+export function listenToTransactions(userId: string, onUpdate: (txs: Transaction[]) => void) {
   const path = 'transactions';
-  return onSnapshot(
+  const q = query(
     collection(db, path),
+    where('sharedWith', 'array-contains', userId)
+  );
+
+  return onSnapshot(
+    q,
     (snapshot) => {
       const items: Transaction[] = [];
       snapshot.forEach((doc) => {

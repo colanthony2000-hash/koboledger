@@ -42,6 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
     signOutGoogle,
     subscription,
     openSubscriptionModal,
+    openUserProfileModal,
   } = useFinance();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -196,11 +197,25 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Household Role Switcher */}
-          <div className="flex items-center gap-1.5 border border-slate-200 dark:border-white/10 rounded-xl px-2 py-1 bg-white/70 dark:bg-white/5 text-xs">
-            <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center justify-center font-bold text-[9px]">
-              {currentUser.avatar_initials}
-            </div>
+          {/* Household Role Switcher & Profile Matrix Trigger */}
+          <div className="flex items-center gap-1.5 border border-slate-200 dark:border-white/10 rounded-xl p-1 bg-white/70 dark:bg-white/5 text-xs">
+            <button
+              onClick={() => openUserProfileModal(currentUser)}
+              className="flex items-center gap-1.5 p-0.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer group"
+              title="Click to view full Role Details, Permissions Matrix & Scope"
+            >
+              <div
+                className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-[10px] text-white shadow-xs ${
+                  currentUser.role === 'owner'
+                    ? 'bg-amber-600'
+                    : currentUser.role === 'auditor'
+                    ? 'bg-purple-600'
+                    : 'bg-blue-600'
+                }`}
+              >
+                {currentUser.avatar_initials}
+              </div>
+            </button>
             <select
               value={currentUser.id}
               onChange={(e) => switchUser(e.target.value)}
@@ -209,7 +224,7 @@ export const Header: React.FC<HeaderProps> = ({
             >
               {SEED_USERS.map((u) => (
                 <option key={u.id} value={u.id} className="dark:bg-[#0E131F]">
-                  {u.name.split(' ')[0]} ({u.role})
+                  {u.name.split(' ')[0]} ({u.role.toUpperCase()})
                 </option>
               ))}
             </select>
@@ -225,14 +240,25 @@ export const Header: React.FC<HeaderProps> = ({
             {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
           </button>
 
-          {/* Primary Action Button */}
-          <button
-            onClick={onOpenQuickAdd}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer active:scale-95 whitespace-nowrap"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Quick Add</span>
-          </button>
+          {/* Primary Action Button (Read-Only Guard for Auditor) */}
+          {currentUser.role === 'auditor' ? (
+            <button
+              onClick={() => openUserProfileModal(currentUser)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600/15 border border-purple-500/30 px-3 py-1.5 text-xs font-bold text-purple-700 dark:text-purple-300 transition-colors cursor-pointer active:scale-95 whitespace-nowrap"
+              title="Auditor Perspective: Read-Only Access. Ledger entries cannot be created."
+            >
+              <Lock className="w-3.5 h-3.5 text-purple-500" />
+              <span className="hidden sm:inline">Audit View (Read-Only)</span>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenQuickAdd}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer active:scale-95 whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Quick Add</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -11,6 +11,7 @@ import { AcceptanceTestsView } from './components/AcceptanceTestsView';
 import { QuickAddModal } from './components/QuickAddModal';
 import { BackupModal } from './components/BackupModal';
 import { SubscriptionModal } from './components/SubscriptionModal';
+import { UserProfileModal } from './components/UserProfileModal';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
@@ -75,6 +76,7 @@ export default function App() {
         />
 
         <SubscriptionModal />
+        <UserProfileModal />
 
         {/* Quiet Editorial Footer */}
         <footer className="border-t border-slate-200/80 dark:border-white/5 bg-white dark:bg-[#0E131F] py-6 text-xs text-slate-500 transition-colors">

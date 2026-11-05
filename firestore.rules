@@ -27,69 +27,104 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Users Collection
+    // Scoped Read access: Owner or explicitly listed in sharedWith
+    function canReadDoc() {
+      return isSignedIn() && (
+        resource.data.owner_user_id == request.auth.uid ||
+        request.auth.uid in resource.data.get('sharedWith', [])
+      );
+    }
+
+    // Users Collection: Private to owner, prevents privilege escalation
     match /users/{userId} {
-      allow get: if isSignedIn() && (isOwner(userId) || resource.data.workspaceId == request.auth.token.workspaceId);
-      allow list: if isSignedIn();
-      allow create: if isOwner(userId) && incoming().uid == request.auth.uid && incoming().email is string;
-      allow update: if isOwner(userId) && incoming().uid == existing().uid && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'workspaceId']);
-      allow delete: if false;
+      allow get: if isOwner(userId);
+      allow list: if false; // Disallow scraping entire user directory
+      allow create: if isOwner(userId) && incoming().uid == request.auth.uid;
+      allow update: if isOwner(userId)
+        && incoming().uid == existing().uid
+        && !incoming().diff(existing()).affectedKeys().hasAny(['role', 'workspaceId']);
+      allow delete: if isOwner(userId); // Allows GDPR account deletion
     }
 
-    // Accounts Collection
+    // Accounts Collection: Scoped to owner or sharedWith, blocks owner flipping
     match /accounts/{accountId} {
-      allow get: if isSignedIn() && isValidId(accountId) && (resource.data.visibility == 'shared' || resource.data.owner_user_id == request.auth.uid);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(accountId) && incoming().owner_user_id == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(accountId) && (existing().owner_user_id == request.auth.uid || existing().visibility == 'shared');
-      allow delete: if isSignedIn() && isValidId(accountId) && existing().owner_user_id == request.auth.uid;
+      allow get, list: if canReadDoc();
+      allow create: if isSignedIn() && isValidId(accountId)
+        && incoming().owner_user_id == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(accountId)
+        && existing().owner_user_id == request.auth.uid
+        && incoming().owner_user_id == existing().owner_user_id;
+      allow delete: if isSignedIn() && isValidId(accountId)
+        && existing().owner_user_id == request.auth.uid;
     }
 
-    // Transactions Collection
+    // Transactions Collection: Strict append-only immutable ledger
     match /transactions/{transactionId} {
-      allow get: if isSignedIn() && isValidId(transactionId) && (resource.data.visibility == 'shared' || resource.data.owner_user_id == request.auth.uid);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(transactionId) && incoming().owner_user_id == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(transactionId) && (existing().owner_user_id == request.auth.uid || existing().visibility == 'shared');
-      allow delete: if false; // Invariant: Transactions are immutable; reversals only
+      allow get, list: if canReadDoc();
+      allow create: if isSignedIn() && isValidId(transactionId)
+        && incoming().owner_user_id == request.auth.uid
+        && incoming().amount_minor is int && incoming().amount_minor > 0;
+      allow update: if false; // IMMUTABLE LEDGER: Reversals only via new transactions
+      allow delete: if false; // APPEND-ONLY: Never delete posted transactions
     }
 
-    // Categories Collection
+    // Categories Collection: Scoped categorization
     match /categories/{categoryId} {
       allow get, list: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(categoryId);
+      allow create: if isSignedIn() && isValidId(categoryId);
+      allow update: if isSignedIn() && isValidId(categoryId)
+        && (existing().get('owner_user_id', '') == request.auth.uid || !('owner_user_id' in existing()));
       allow delete: if false;
     }
 
-    // Debts Collection
+    // Debts Collection: Scoped ownership with positive principal validation
     match /debts/{debtId} {
-      allow get: if isSignedIn() && isValidId(debtId) && (resource.data.visibility == 'shared' || resource.data.owner_user_id == request.auth.uid);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(debtId) && incoming().owner_user_id == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(debtId) && (existing().owner_user_id == request.auth.uid || existing().visibility == 'shared');
-      allow delete: if isSignedIn() && isValidId(debtId) && existing().owner_user_id == request.auth.uid;
+      allow get, list: if canReadDoc();
+      allow create: if isSignedIn() && isValidId(debtId)
+        && incoming().owner_user_id == request.auth.uid
+        && incoming().principal_minor is int && incoming().principal_minor > 0;
+      allow update: if isSignedIn() && isValidId(debtId)
+        && existing().owner_user_id == request.auth.uid
+        && incoming().owner_user_id == existing().owner_user_id;
+      allow delete: if isSignedIn() && isValidId(debtId)
+        && existing().owner_user_id == request.auth.uid;
     }
 
-    // Budgets Collection
+    // Budgets Collection: Scoped ownership
     match /budgets/{budgetId} {
-      allow get, list: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(budgetId);
-      allow delete: if isSignedIn() && isValidId(budgetId);
+      allow get, list: if canReadDoc();
+      allow create: if isSignedIn() && isValidId(budgetId)
+        && incoming().owner_user_id == request.auth.uid
+        && incoming().limit_minor is int && incoming().limit_minor > 0;
+      allow update: if isSignedIn() && isValidId(budgetId)
+        && existing().owner_user_id == request.auth.uid
+        && incoming().owner_user_id == existing().owner_user_id;
+      allow delete: if isSignedIn() && isValidId(budgetId)
+        && existing().owner_user_id == request.auth.uid;
     }
 
-    // Savings Goals Collection
+    // Savings Goals Collection: Scoped ownership
     match /savings_goals/{goalId} {
-      allow get, list: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(goalId);
-      allow delete: if isSignedIn() && isValidId(goalId);
+      allow get, list: if canReadDoc();
+      allow create: if isSignedIn() && isValidId(goalId)
+        && incoming().owner_user_id == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(goalId)
+        && existing().owner_user_id == request.auth.uid
+        && incoming().owner_user_id == existing().owner_user_id;
+      allow delete: if isSignedIn() && isValidId(goalId)
+        && existing().owner_user_id == request.auth.uid;
     }
 
-    // Commitments Collection
+    // Commitments Collection: Scoped ownership
     match /commitments/{commitmentId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(commitmentId) && incoming().owner_user_id == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(commitmentId);
-      allow delete: if isSignedIn() && isValidId(commitmentId) && existing().owner_user_id == request.auth.uid;
+      allow get, list: if canReadDoc();
+      allow create: if isSignedIn() && isValidId(commitmentId)
+        && incoming().owner_user_id == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(commitmentId)
+        && existing().owner_user_id == request.auth.uid
+        && incoming().owner_user_id == existing().owner_user_id;
+      allow delete: if isSignedIn() && isValidId(commitmentId)
+        && existing().owner_user_id == request.auth.uid;
     }
   }
 }

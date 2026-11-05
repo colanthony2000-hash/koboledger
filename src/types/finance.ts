@@ -226,6 +226,35 @@ export interface UserSubscription {
   amountPaidMinor?: number;
 }
 
+export type WorkspaceType = 'household' | 'company';
+
+export interface UserRolePermissions {
+  canPostTransactions: boolean;
+  canReverseTransactions: boolean;
+  canManageAccounts: boolean;
+  canViewPrivateRecords: boolean;
+  canManageBudgets: boolean;
+  canManageSavings: boolean;
+  canManageDebts: boolean;
+  canManageSubscriptions: boolean;
+  canExportAuditStatements: boolean;
+  canReconcileAccounts: boolean;
+  isReadOnly: boolean;
+}
+
+export interface UserRoleDetails {
+  designation: string;
+  department: string;
+  affiliation: string;
+  email: string;
+  phoneNumber?: string;
+  workspaceType: WorkspaceType;
+  workspaceName: string;
+  scopeDescription: string;
+  permissions: UserRolePermissions;
+  assignedAccounts: string[];
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -234,6 +263,9 @@ export interface UserProfile {
   email?: string;
   photoURL?: string;
   subscription?: UserSubscription;
+  details?: UserRoleDetails;
+  workspace_id?: string;
+  workspace_type?: WorkspaceType;
 }
 
 export interface StatementReconciliation {
@@ -245,3 +277,32 @@ export interface StatementReconciliation {
   reconciled_at: string;
   reconciled_by: string;
 }
+
+export type RecurrenceInterval = 'daily' | 'weekly' | 'monthly';
+
+export interface RecurringTransaction {
+  id: string;
+  description: string;
+  amount_minor: number;
+  currency: Currency;
+  type: 'income' | 'expense' | 'transfer';
+  interval: RecurrenceInterval;
+  account_id: string;
+  category_id?: string;
+  destination_account_id?: string;
+  next_due_date: string;
+  last_executed_date?: string;
+  status: 'active' | 'paused';
+  owner_user_id: string;
+  visibility: 'shared' | 'private';
+  created_at: string;
+}
+
+export interface DailySavingsSetting {
+  target_minor: number;
+  saved_today_minor: number;
+  last_reset_date: string;
+  target_goal_id?: string;
+  streak_days: number;
+}
+
