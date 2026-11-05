@@ -198,7 +198,7 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {/* Household Role Switcher & Profile Matrix Trigger */}
-          <div className="flex items-center gap-1.5 border border-slate-200 dark:border-white/10 rounded-xl p-1 bg-white/70 dark:bg-white/5 text-xs">
+          {!firebaseUser && <div className="flex items-center gap-1.5 border border-slate-200 dark:border-white/10 rounded-xl p-1 bg-white/70 dark:bg-white/5 text-xs">
             <button
               onClick={() => openUserProfileModal(currentUser)}
               className="flex items-center gap-1.5 p-0.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer group"
@@ -228,7 +228,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </option>
               ))}
             </select>
-          </div>
+          </div>}
 
           {/* Dark / Light Toggle */}
           <button

@@ -37,6 +37,10 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
 
   // Filter based on user selections
   const filteredTxs = visibleTxs.filter((tx) => {
+    const today = new Date();
+    const cutoff = new Date(today);
+    if (dateRange === 'last_30_days') cutoff.setDate(cutoff.getDate() - 30);
+    if (dateRange === 'last_6_months') cutoff.setMonth(cutoff.getMonth() - 6);
     // Type filter
     if (selectedType !== 'all' && tx.type !== selectedType) return false;
 
@@ -51,13 +55,10 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
 
     // Date range filter
     if (dateRange === 'current_month') {
-      return tx.effective_date.startsWith('2026-11');
+      return tx.effective_date.startsWith(today.toISOString().slice(0, 7));
     }
-    if (dateRange === 'last_30_days') {
-      return tx.effective_date >= '2026-10-05';
-    }
-    if (dateRange === 'last_6_months') {
-      return tx.effective_date >= '2026-05-01';
+    if (dateRange === 'last_30_days' || dateRange === 'last_6_months') {
+      return tx.effective_date >= cutoff.toISOString().slice(0, 10);
     }
 
     return true;
@@ -119,13 +120,13 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
     let csvContent = 'data:text/csv;charset=utf-8,';
 
     if (includeBalancesSummary) {
-      csvContent += 'JENECONK INTEGRATED GLOBAL SOLUTIONS LIMITED - FINANCIAL STATEMENT SUMMARY\n';
+      csvContent += 'KoboLedger Financial Summary\n';
       csvContent += `Generated On,${new Date().toISOString()}\n`;
       csvContent += `Account Holder,${currentUser.name} (${currentUser.role})\n`;
       csvContent += `Total Inflows NGN,${(totalInflowsMinor / 100).toFixed(2)}\n`;
       csvContent += `Total Outflows NGN,${(totalOutflowsMinor / 100).toFixed(2)}\n`;
       csvContent += `Net Ledger Movement NGN,${(netBalanceMinor / 100).toFixed(2)}\n\n`;
-      csvContent += 'INSTITUTIONAL ACCOUNT BALANCES\n';
+      csvContent += 'ACCOUNT BALANCES\n';
       accounts.forEach((a) => {
         csvContent += `"${a.name} (${a.institution_name || a.type})",NGN,${(a.opening_balance_minor / 100).toFixed(2)}\n`;
       });
@@ -139,7 +140,7 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
     link.setAttribute('href', encodedUri);
     link.setAttribute(
       'download',
-      `jeneconk_financial_records_${dateRange}_${new Date().toISOString().split('T')[0]}.csv`
+      `koboledger_financial_records_${dateRange}_${new Date().toISOString().split('T')[0]}.csv`
     );
     document.body.appendChild(link);
     link.click();
@@ -159,7 +160,7 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
       <!DOCTYPE html>
       <html>
         <head>
-          <title>JENECONK Financial Statement - ${currentUser.name}</title>
+          <title>KoboLedger Financial Summary - ${currentUser.name}</title>
           <style>
             @page { size: A4; margin: 15mm; }
             body {
@@ -290,10 +291,10 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
         <body>
           <div class="header">
             <div class="brand">
-              <img src="${window.location.origin}/assets/aistudio/logo_bf2c43a3.png" alt="JENECONK Logo" />
+              <img src="${window.location.origin}/assets/aistudio/logo_bf2c43a3.png" alt="KoboLedger Logo" />
               <div>
-                <div class="company-name">JENECONK INTEGRATED GLOBAL SOLUTIONS LIMITED</div>
-                <div class="sub-title">KoboLedger Financial Management System · Certified General Ledger</div>
+                <div class="company-name">KoboLedger</div>
+                <div class="sub-title">Personal Finance Summary</div>
               </div>
             </div>
             <div class="statement-meta">
@@ -363,8 +364,8 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
 
           <div class="footer">
             <div>
-              <strong>JENECONK INTEGRATED GLOBAL SOLUTIONS LIMITED</strong> · Wema Bank: 0128077067<br />
-              Generated for official accounting, tax filing, and external financial audit.
+              <strong>KoboLedger</strong><br />
+              Generated for the account holder. Review figures before relying on this summary.
             </div>
             <div style="text-align: right;">
               Page 1 of 1 · Verified Kobo-Precision Ledger
@@ -402,7 +403,7 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
                 Export Financial Records
               </h2>
               <p className="text-xs text-slate-500">
-                Download verified ledger statements in CSV or PDF format
+                Download your ledger data in CSV or PDF format
               </p>
             </div>
           </div>

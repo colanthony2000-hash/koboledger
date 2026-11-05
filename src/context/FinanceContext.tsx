@@ -4,7 +4,7 @@
  * offline synchronization, and deterministic quick-add flows.
  */
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useState } from 'react';
 import {
   Account,
   AuditLog,
@@ -38,14 +38,9 @@ import {
 } from '../services/firebase';
 import {
   persistTransaction,
-  persistAccount,
-  persistDebt,
-  persistBudget,
-  persistSavingsGoal,
-  persistCommitment,
   persistUserProfile,
-  seedInitialFirestoreData,
   listenToTransactions,
+  ensurePersonalWorkspace,
 } from '../services/firebaseSync';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
@@ -73,7 +68,7 @@ export const SEED_USERS: UserProfile[] = [
       phoneNumber: '+234 803 555 0192',
       workspaceType: 'household',
       workspaceName: 'Okafor Family Office & Treasury',
-      scopeDescription: 'Primary administrative authority over all shared accounts, private savings, corporate bank linking (Wema Bank 0128077067), master budgets, debt management, and subscription billing.',
+      scopeDescription: 'Owner access to shared household records and workspace settings.',
       permissions: {
         canPostTransactions: true,
         canReverseTransactions: true,
@@ -1299,63 +1294,71 @@ interface FinanceContextType {
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
+const FINANCE_STORAGE_KEYS = [
+  'accounts', 'transactions', 'categories', 'goals', 'allocations', 'commitments',
+  'debts', 'budgets', 'budget_alerts', 'project_items', 'audit_logs', 'subscription',
+  'recurring', 'daily_savings',
+] as const;
+
+function financeStorageKey(userId: string | null, key: string): string {
+  return userId ? `kl_user_${userId}_${key}` : `kl_demo_${key}`;
+}
+
+function readFinanceStorage<T>(userId: string | null, key: string, fallback: T): T {
+  try {
+    const saved = localStorage.getItem(financeStorageKey(userId, key));
+    return saved ? JSON.parse(saved) as T : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<UserProfile>(SEED_USERS[0]);
 
   const [accounts, setAccounts] = useState<Account[]>(() => {
-    const saved = localStorage.getItem('kl_accounts');
-    return saved ? JSON.parse(saved) : SEED_ACCOUNTS;
+    return readFinanceStorage(null, 'accounts', SEED_ACCOUNTS);
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('kl_transactions');
-    return saved ? JSON.parse(saved) : ALL_INITIAL_SEED_TRANSACTIONS;
+    return readFinanceStorage(null, 'transactions', ALL_INITIAL_SEED_TRANSACTIONS);
   });
 
   const [categories, setCategories] = useState<Category[]>(() => {
-    const saved = localStorage.getItem('kl_categories');
-    return saved ? JSON.parse(saved) : SEED_CATEGORIES;
+    return readFinanceStorage(null, 'categories', SEED_CATEGORIES);
   });
 
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(() => {
-    const saved = localStorage.getItem('kl_goals');
-    return saved ? JSON.parse(saved) : SEED_GOALS;
+    return readFinanceStorage(null, 'goals', SEED_GOALS);
   });
 
   const [goalAllocations, setGoalAllocations] = useState<GoalAllocation[]>(() => {
-    const saved = localStorage.getItem('kl_allocations');
-    return saved ? JSON.parse(saved) : SEED_ALLOCATIONS;
+    return readFinanceStorage(null, 'allocations', SEED_ALLOCATIONS);
   });
 
   const [commitments, setCommitments] = useState<Commitment[]>(() => {
-    const saved = localStorage.getItem('kl_commitments');
-    return saved ? JSON.parse(saved) : SEED_COMMITMENTS;
+    return readFinanceStorage(null, 'commitments', SEED_COMMITMENTS);
   });
 
   const [debts, setDebts] = useState<Debt[]>(() => {
-    const saved = localStorage.getItem('kl_debts');
-    return saved ? JSON.parse(saved) : SEED_DEBTS;
+    return readFinanceStorage(null, 'debts', SEED_DEBTS);
   });
 
   const [budgets, setBudgets] = useState<Budget[]>(() => {
-    const saved = localStorage.getItem('kl_budgets');
-    return saved ? JSON.parse(saved) : SEED_BUDGETS;
+    return readFinanceStorage(null, 'budgets', SEED_BUDGETS);
   });
 
   const [budgetAlerts, setBudgetAlerts] = useState<BudgetAlert[]>(() => {
-    const saved = localStorage.getItem('kl_budget_alerts');
-    return saved ? JSON.parse(saved) : [];
+    return readFinanceStorage<BudgetAlert[]>(null, 'budget_alerts', []);
   });
 
   const [projects] = useState<Project[]>([SEED_PROJECT]);
   const [projectItems, setProjectItems] = useState<ProjectItem[]>(() => {
-    const saved = localStorage.getItem('kl_project_items');
-    return saved ? JSON.parse(saved) : SEED_PROJECT_ITEMS;
+    return readFinanceStorage(null, 'project_items', SEED_PROJECT_ITEMS);
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('kl_audit_logs');
-    return saved ? JSON.parse(saved) : [
+    return readFinanceStorage<AuditLog[]>(null, 'audit_logs', [
       {
         id: 'audit_init',
         timestamp: new Date().toISOString(),
@@ -1366,30 +1369,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         entity_id: 'ws_main',
         details: 'Initialized KoboLedger double-entry posting ledger with seed accounts and opening balances.',
       },
-    ];
+    ]);
   });
 
   // Recurring Transactions State
   const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>(() => {
-    const saved = localStorage.getItem('kl_recurring');
-    return saved ? JSON.parse(saved) : SEED_RECURRING;
+    return readFinanceStorage(null, 'recurring', SEED_RECURRING);
   });
 
   // Daily Savings Setting State
   const [dailySavings, setDailySavings] = useState<DailySavingsSetting>(() => {
-    const saved = localStorage.getItem('kl_daily_savings');
-    return saved ? JSON.parse(saved) : DEFAULT_DAILY_SAVINGS;
+    return readFinanceStorage(null, 'daily_savings', DEFAULT_DAILY_SAVINGS);
   });
 
   // Subscription State & Commercial Monetization
   const [subscription, setSubscription] = useState<UserSubscription>(() => {
-    const saved = localStorage.getItem('kl_subscription');
-    return saved
-      ? JSON.parse(saved)
-      : {
+    return readFinanceStorage<UserSubscription>(null, 'subscription', {
           tier: 'free',
           status: 'free',
-        };
+        });
   });
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [requestedFeature, setRequestedFeature] = useState<string | undefined>(undefined);
@@ -1421,7 +1419,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateSubscription = (sub: Partial<UserSubscription>) => {
     setSubscription((prev) => {
       const updated = { ...prev, ...sub } as UserSubscription;
-      localStorage.setItem('kl_subscription', JSON.stringify(updated));
       return updated;
     });
   };
@@ -1436,8 +1433,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [hydratedStorageId, setHydratedStorageId] = useState<string | null>('demo');
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isWorkspaceReady, setIsWorkspaceReady] = useState<boolean>(false);
+
+  const persistFinanceState = (key: string, value: unknown) => {
+    const userId = firebaseUser?.uid ?? null;
+    if (hydratedStorageId !== (userId ?? 'demo')) return;
+    localStorage.setItem(financeStorageKey(userId, key), JSON.stringify(value));
+  };
 
   // Connection & Auth subscription (Phase 1)
   useEffect(() => {
@@ -1447,7 +1452,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
+      setIsWorkspaceReady(false);
       if (user) {
+        if (auth.currentUser?.uid !== user.uid) return;
         const initials = user.displayName
           ? user.displayName
               .split(' ')
@@ -1467,37 +1474,56 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
         setCurrentUser(updatedProfile);
 
-        persistUserProfile(updatedProfile).catch((err) =>
-          console.warn('Could not persist user profile to Firestore:', err)
-        );
-
-        seedInitialFirestoreData({
-          accounts,
-          transactions,
-          debts,
-          budgets,
-          savingsGoals,
-          commitments,
-        }).catch((err) => console.warn('Firestore initial seed skipped:', err));
+        try {
+          await ensurePersonalWorkspace(updatedProfile.name);
+          await persistUserProfile(updatedProfile);
+          if (auth.currentUser?.uid === user.uid) setIsWorkspaceReady(true);
+        } catch (err) {
+          console.warn('Could not initialize the private finance workspace:', err);
+        }
       }
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Real-time Firestore transaction sync with scoped query (INV-01, Rules-Compliant)
+  // Keep each signed-in customer's local cache separate on shared devices.
+  // The demo namespace remains separate from authenticated user namespaces.
+  useLayoutEffect(() => {
+    const userId = firebaseUser?.uid ?? null;
+    const storageId = userId ?? 'demo';
+    setHydratedStorageId(null);
+    const demoMode = !userId;
+    setAccounts(readFinanceStorage(userId, 'accounts', demoMode ? SEED_ACCOUNTS : []));
+    setTransactions(readFinanceStorage(userId, 'transactions', demoMode ? ALL_INITIAL_SEED_TRANSACTIONS : []));
+    setCategories(readFinanceStorage(userId, 'categories', SEED_CATEGORIES));
+    setSavingsGoals(readFinanceStorage(userId, 'goals', demoMode ? SEED_GOALS : []));
+    setGoalAllocations(readFinanceStorage(userId, 'allocations', demoMode ? SEED_ALLOCATIONS : []));
+    setCommitments(readFinanceStorage(userId, 'commitments', demoMode ? SEED_COMMITMENTS : []));
+    setDebts(readFinanceStorage(userId, 'debts', demoMode ? SEED_DEBTS : []));
+    setBudgets(readFinanceStorage(userId, 'budgets', demoMode ? SEED_BUDGETS : []));
+    setBudgetAlerts(readFinanceStorage<BudgetAlert[]>(userId, 'budget_alerts', []));
+    setProjectItems(readFinanceStorage(userId, 'project_items', demoMode ? SEED_PROJECT_ITEMS : []));
+    setAuditLogs(readFinanceStorage<AuditLog[]>(userId, 'audit_logs', []));
+    setRecurringTransactions(readFinanceStorage(userId, 'recurring', demoMode ? SEED_RECURRING : []));
+    setDailySavings(readFinanceStorage<DailySavingsSetting>(userId, 'daily_savings', demoMode ? DEFAULT_DAILY_SAVINGS : {
+      target_minor: 0, saved_today_minor: 0, last_reset_date: new Date().toISOString().slice(0, 10), streak_days: 0,
+    }));
+    setSubscription(readFinanceStorage<UserSubscription>(userId, 'subscription', { tier: 'free', status: 'free' }));
+    setHydratedStorageId(storageId);
+  }, [firebaseUser?.uid]);
+
+  // Real-time Firestore transaction sync
   useEffect(() => {
-    if (!firebaseUser) return;
+    if (!firebaseUser || !isWorkspaceReady) return;
     setIsSyncing(true);
     const userId = firebaseUser.uid;
     const unsub = listenToTransactions(userId, (remoteTxs) => {
       setIsSyncing(false);
-      if (remoteTxs && remoteTxs.length > 0) {
-        setTransactions(remoteTxs);
-      }
+      setTransactions(remoteTxs);
     });
     return () => unsub();
-  }, [firebaseUser]);
+  }, [firebaseUser, isWorkspaceReady]);
 
   const signInGoogle = async () => {
     try {
@@ -1520,38 +1546,47 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Save changes to localStorage
   useEffect(() => {
-    localStorage.setItem('kl_accounts', JSON.stringify(accounts));
-  }, [accounts]);
+    persistFinanceState('accounts', accounts);
+  }, [accounts, firebaseUser?.uid, hydratedStorageId]);
   useEffect(() => {
-    localStorage.setItem('kl_transactions', JSON.stringify(transactions));
-  }, [transactions]);
+    persistFinanceState('transactions', transactions);
+  }, [transactions, firebaseUser?.uid, hydratedStorageId]);
   useEffect(() => {
-    localStorage.setItem('kl_categories', JSON.stringify(categories));
-  }, [categories]);
+    persistFinanceState('categories', categories);
+  }, [categories, firebaseUser?.uid, hydratedStorageId]);
   useEffect(() => {
-    localStorage.setItem('kl_goals', JSON.stringify(savingsGoals));
-  }, [savingsGoals]);
+    persistFinanceState('goals', savingsGoals);
+  }, [savingsGoals, firebaseUser?.uid, hydratedStorageId]);
   useEffect(() => {
-    localStorage.setItem('kl_allocations', JSON.stringify(goalAllocations));
-  }, [goalAllocations]);
+    persistFinanceState('allocations', goalAllocations);
+  }, [goalAllocations, firebaseUser?.uid, hydratedStorageId]);
   useEffect(() => {
-    localStorage.setItem('kl_commitments', JSON.stringify(commitments));
-  }, [commitments]);
+    persistFinanceState('commitments', commitments);
+  }, [commitments, firebaseUser?.uid, hydratedStorageId]);
   useEffect(() => {
-    localStorage.setItem('kl_debts', JSON.stringify(debts));
-  }, [debts]);
+    persistFinanceState('debts', debts);
+  }, [debts, firebaseUser?.uid, hydratedStorageId]);
   useEffect(() => {
-    localStorage.setItem('kl_budgets', JSON.stringify(budgets));
-  }, [budgets]);
+    persistFinanceState('budgets', budgets);
+  }, [budgets, firebaseUser?.uid, hydratedStorageId]);
   useEffect(() => {
-    localStorage.setItem('kl_budget_alerts', JSON.stringify(budgetAlerts));
-  }, [budgetAlerts]);
+    persistFinanceState('budget_alerts', budgetAlerts);
+  }, [budgetAlerts, firebaseUser?.uid, hydratedStorageId]);
   useEffect(() => {
-    localStorage.setItem('kl_project_items', JSON.stringify(projectItems));
-  }, [projectItems]);
+    persistFinanceState('project_items', projectItems);
+  }, [projectItems, firebaseUser?.uid, hydratedStorageId]);
   useEffect(() => {
-    localStorage.setItem('kl_audit_logs', JSON.stringify(auditLogs));
-  }, [auditLogs]);
+    persistFinanceState('audit_logs', auditLogs);
+  }, [auditLogs, firebaseUser?.uid, hydratedStorageId]);
+  useEffect(() => {
+    persistFinanceState('subscription', subscription);
+  }, [subscription, firebaseUser?.uid, hydratedStorageId]);
+  useEffect(() => {
+    persistFinanceState('recurring', recurringTransactions);
+  }, [recurringTransactions, firebaseUser?.uid, hydratedStorageId]);
+  useEffect(() => {
+    persistFinanceState('daily_savings', dailySavings);
+  }, [dailySavings, firebaseUser?.uid, hydratedStorageId]);
 
   // Check budget thresholds on transaction updates with Deduplication Key (Section 6, T-04)
   useEffect(() => {
@@ -1602,6 +1637,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [transactions, budgets, categories]);
 
   const switchUser = (userId: string) => {
+    if (firebaseUser) return;
     const found = SEED_USERS.find((u) => u.id === userId);
     if (found) {
       setCurrentUser(found);
@@ -2076,7 +2112,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
     setRecurringTransactions((prev) => {
       const updated = [newRec, ...prev];
-      localStorage.setItem('kl_recurring', JSON.stringify(updated));
       return updated;
     });
   };
@@ -2084,7 +2119,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateRecurringTransaction = (id: string, updates: Partial<RecurringTransaction>) => {
     setRecurringTransactions((prev) => {
       const updated = prev.map((r) => (r.id === id ? { ...r, ...updates } : r));
-      localStorage.setItem('kl_recurring', JSON.stringify(updated));
       return updated;
     });
   };
@@ -2092,7 +2126,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteRecurringTransaction = (id: string) => {
     setRecurringTransactions((prev) => {
       const updated = prev.filter((r) => r.id !== id);
-      localStorage.setItem('kl_recurring', JSON.stringify(updated));
       return updated;
     });
   };
@@ -2151,7 +2184,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateDailySavingsTarget = (targetMinor: number) => {
     setDailySavings((prev) => {
       const updated = { ...prev, target_minor: targetMinor };
-      localStorage.setItem('kl_daily_savings', JSON.stringify(updated));
       return updated;
     });
   };
@@ -2170,13 +2202,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         saved_today_minor: newSaved,
         streak_days: isTargetMet ? (prev.saved_today_minor < prev.target_minor ? prev.streak_days + 1 : prev.streak_days) : prev.streak_days,
       };
-      localStorage.setItem('kl_daily_savings', JSON.stringify(updated));
       return updated;
     });
   };
 
   const resetToDefaultSeed = () => {
-    localStorage.clear();
+    const userId = firebaseUser?.uid ?? null;
+    for (const key of FINANCE_STORAGE_KEYS) {
+      localStorage.removeItem(financeStorageKey(userId, key));
+    }
     setAccounts(SEED_ACCOUNTS);
     setTransactions(ALL_INITIAL_SEED_TRANSACTIONS);
     setCategories(SEED_CATEGORIES);

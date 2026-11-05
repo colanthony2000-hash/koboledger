@@ -10,7 +10,6 @@ import {
   XCircle,
   Mail,
   Phone,
-  CreditCard,
   Lock,
   Layers,
   Shield,
@@ -24,6 +23,7 @@ export const UserProfileModal: React.FC = () => {
     selectedUserProfile,
     currentUser,
     switchUser,
+    firebaseUser,
   } = useFinance();
 
   if (!isUserProfileModalOpen) return null;
@@ -37,7 +37,7 @@ export const UserProfileModal: React.FC = () => {
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">
             <Shield className="w-3.5 h-3.5 text-amber-500" />
-            OWNER & MANAGING DIRECTOR
+            WORKSPACE OWNER
           </span>
         );
       case 'member':
@@ -91,7 +91,7 @@ export const UserProfileModal: React.FC = () => {
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                JENECONK INTEGRATED GLOBAL SOLUTIONS LIMITED · Role-Based Data Isolation
+                Personal finance workspace · Role-Based Access
               </p>
             </div>
           </div>
@@ -154,8 +154,8 @@ export const UserProfileModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Perspective Quick Switcher */}
-          <div className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02]">
+          {/* Simulated role switching is available only in the unauthenticated demo. */}
+          {!firebaseUser && <div className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02]">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                 Switch Role Perspective (Live Data Isolation Test)
@@ -191,7 +191,7 @@ export const UserProfileModal: React.FC = () => {
                 );
               })}
             </div>
-          </div>
+          </div>}
 
           {/* Workspace & Scope Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -379,7 +379,7 @@ export const UserProfileModal: React.FC = () => {
                     : 'border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.01] text-slate-400'
                 }`}
               >
-                <span>Export Official Certified Statements</span>
+                <span>Export Financial Summaries</span>
                 {details?.permissions.canExportAuditStatements ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                 ) : (
@@ -406,20 +406,6 @@ export const UserProfileModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Corporate Settlement Account Banner */}
-          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2.5">
-              <CreditCard className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <div>
-                <span className="font-bold text-amber-900 dark:text-amber-200">
-                  Wema Bank Corporate Treasury: 0128077067
-                </span>
-                <p className="text-[10px] text-amber-700 dark:text-amber-300">
-                  JENECONK INTEGRATED GLOBAL SOLUTIONS LIMITED · Authorized Billing & Settlement
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}

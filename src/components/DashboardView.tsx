@@ -291,11 +291,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
               {greeting}, {currentUser.name.split(' ')[0]}
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
-              {currentUser.role === 'auditor'
-                ? 'Independent statutory audit perspective. You have read-only supervisory access to all shared general ledger postings and accounting invariants.'
-                : currentUser.role === 'member'
-                ? 'Household logistics workspace. Access to shared daily cash and Kuda mobile money accounts for grocery and upkeep tracking.'
-                : 'Master treasury workspace with administrative authority over all shared accounts, private vaults, corporate linking, and budgets.'}
+              Private finance workspace for tracking accounts, budgets, goals, and transactions.
             </p>
           </div>
 
@@ -456,7 +452,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                 Accelerate Debt Freedom & Smart Household Budgeting
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-                Enjoy flexible subscriptions starting at <strong>₦1,500/week</strong> or <strong>₦5,000/month</strong>. Verified <strong>Paystack</strong> checkout or manual direct transfer to our company account at <strong>Wema Bank 0128077067 (JENECONK INTEGRATED GLOBAL SOLUTIONS LIMITED)</strong>.
+                Subscription plans are being prepared. Paid features will become available after secure checkout is configured.
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
                 <div className="flex items-center gap-1.5 text-amber-200">

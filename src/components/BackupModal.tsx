@@ -19,6 +19,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
     budgets,
     projectItems,
     auditLogs,
+    firebaseUser,
     resetToDefaultSeed,
   } = useFinance();
 
@@ -63,16 +64,17 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
         throw new Error('Invalid backup schema. Required collections missing.');
       }
 
-      localStorage.setItem('kl_accounts', JSON.stringify(parsed.data.accounts));
-      localStorage.setItem('kl_transactions', JSON.stringify(parsed.data.transactions));
-      localStorage.setItem('kl_categories', JSON.stringify(parsed.data.categories));
-      localStorage.setItem('kl_goals', JSON.stringify(parsed.data.savingsGoals));
-      localStorage.setItem('kl_allocations', JSON.stringify(parsed.data.goalAllocations));
-      localStorage.setItem('kl_commitments', JSON.stringify(parsed.data.commitments));
-      localStorage.setItem('kl_debts', JSON.stringify(parsed.data.debts));
-      localStorage.setItem('kl_budgets', JSON.stringify(parsed.data.budgets));
-      localStorage.setItem('kl_project_items', JSON.stringify(parsed.data.projectItems));
-      localStorage.setItem('kl_audit_logs', JSON.stringify(parsed.data.auditLogs));
+      const prefix = firebaseUser?.uid ? `kl_user_${firebaseUser.uid}_` : 'kl_';
+      localStorage.setItem(`${prefix}accounts`, JSON.stringify(parsed.data.accounts));
+      localStorage.setItem(`${prefix}transactions`, JSON.stringify(parsed.data.transactions));
+      localStorage.setItem(`${prefix}categories`, JSON.stringify(parsed.data.categories));
+      localStorage.setItem(`${prefix}goals`, JSON.stringify(parsed.data.savingsGoals));
+      localStorage.setItem(`${prefix}allocations`, JSON.stringify(parsed.data.goalAllocations));
+      localStorage.setItem(`${prefix}commitments`, JSON.stringify(parsed.data.commitments));
+      localStorage.setItem(`${prefix}debts`, JSON.stringify(parsed.data.debts));
+      localStorage.setItem(`${prefix}budgets`, JSON.stringify(parsed.data.budgets));
+      localStorage.setItem(`${prefix}project_items`, JSON.stringify(parsed.data.projectItems));
+      localStorage.setItem(`${prefix}audit_logs`, JSON.stringify(parsed.data.auditLogs));
 
       setRestoreStatus('Backup successfully verified and restored! Reloading workspace...');
       setTimeout(() => {
