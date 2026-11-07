@@ -1303,6 +1303,7 @@ interface FinanceContextType {
   isSyncing: boolean;
   authError: string | null;
   workspaceSetupError: string | null;
+  financeSyncError: string | null;
   isPlatformAdmin: boolean;
   platformSettings: PlatformSettings;
   savePlatformSettings: (settings: PlatformSettings) => Promise<void>;
@@ -1537,6 +1538,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isWorkspaceReady, setIsWorkspaceReady] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [workspaceSetupError, setWorkspaceSetupError] = useState<string | null>(null);
+  const [financeSyncError, setFinanceSyncError] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(DEFAULT_PLATFORM_SETTINGS);
   const [platformAccounts, setPlatformAccounts] = useState<PlatformAccount[]>([]);
@@ -1764,6 +1766,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const userId = firebaseUser.uid;
     const unsub = listenToTransactions(userId, (remoteTxs) => {
       setIsSyncing(false);
+      setFinanceSyncError(null);
       if (remoteTxs.length === 0 && transactions.length > 0) {
         Promise.all(transactions.map((transaction) => persistTransaction(transaction)))
           .then(() => {
@@ -1776,6 +1779,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         transactionCloudReady.current = true;
         clearLegacyCacheIfCloudReady(userId);
       }
+    }, () => {
+      setIsSyncing(false);
+      setFinanceSyncError('Your ledger could not be loaded from cloud storage. Your saved entries may still be there; check your connection and refresh again.');
     });
     return () => unsub();
   }, [firebaseUser, isWorkspaceReady]);
@@ -2029,9 +2035,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTransactions((prev) => [newTx, ...prev]);
 
     // Persist to Firestore
-    persistTransaction(newTx).catch((e) =>
-      console.warn('Firestore transaction persist skipped:', e)
-    );
+    persistTransaction(newTx).catch(() => {
+      console.warn('Firestore transaction persist failed.');
+      setFinanceSyncError('This entry could not be confirmed in cloud storage. Keep this page open and check your connection before refreshing.');
+    });
 
     setAuditLogs((prev) => [
       {
@@ -2620,6 +2627,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         isSyncing,
         authError,
         workspaceSetupError,
+        financeSyncError,
         isPlatformAdmin,
         platformSettings,
         savePlatformSettings,

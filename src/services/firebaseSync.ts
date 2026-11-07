@@ -227,20 +227,56 @@ export async function persistUserProfile(user: UserProfile & { email?: string; p
   }
 }
 
-export function listenToRecords<T>(name: string, userId: string, onUpdate: (items: T[]) => void) {
-  const scopedQuery = query(collection(db, name), where('sharedWith', 'array-contains', userId));
-  return onSnapshot(
-    scopedQuery,
-    (snapshot) => onUpdate(snapshot.docs.map((item) => item.data() as T)),
-    (error) => handleFirestoreError(error, OperationType.GET, name)
+export function listenToRecords<T>(
+  name: string,
+  userId: string,
+  onUpdate: (items: T[]) => void,
+  onError?: () => void,
+) {
+  // Rules authorize owned records by owner_user_id, and household records by
+  // visibility + sharedWith. Keep each query aligned with its rule branch.
+  const ownedQuery = query(collection(db, name), where('owner_user_id', '==', userId));
+  const sharedQuery = query(
+    collection(db, name),
+    where('visibility', '==', 'shared'),
+    where('sharedWith', 'array-contains', userId),
   );
+  let owned = new Map<string, T>();
+  let shared = new Map<string, T>();
+  let ownedReady = false;
+  let sharedReady = false;
+  const publish = () => {
+    if (!ownedReady || !sharedReady) return;
+    const merged = new Map(owned);
+    for (const [id, record] of shared) merged.set(id, record);
+    onUpdate([...merged.values()]);
+  };
+  const reportError = (name: string) => {
+    console.error('Firestore record read failed:', name);
+    onError?.();
+  };
+  const stopOwned = onSnapshot(ownedQuery, (snapshot) => {
+    owned = new Map(snapshot.docs.map((item) => [item.id, item.data() as T]));
+    ownedReady = true;
+    publish();
+  }, () => {
+    reportError(name);
+  });
+  const stopShared = onSnapshot(sharedQuery, (snapshot) => {
+    shared = new Map(snapshot.docs.map((item) => [item.id, item.data() as T]));
+    sharedReady = true;
+    publish();
+  }, () => {
+    reportError(name);
+  });
+  return () => { stopOwned(); stopShared(); };
 }
 
-export function listenToTransactions(userId: string, onUpdate: (txs: Transaction[]) => void) {
+export function listenToTransactions(userId: string, onUpdate: (txs: Transaction[]) => void, onError?: () => void) {
   return listenToRecords<Transaction>('transactions', userId, (items) => {
     items.sort((a, b) => b.effective_date.localeCompare(a.effective_date));
     onUpdate(items);
-  });
+  }, onError);
 }
 
 export function listenToSubscription(userId: string, onUpdate: (subscription: Record<string, unknown> | null) => void) {

@@ -47,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
     isSyncing,
     authError,
     workspaceSetupError,
+    financeSyncError,
     signInGoogle,
     signOutGoogle,
     subscription,
@@ -323,8 +324,8 @@ export const Header: React.FC<HeaderProps> = ({
 
       {platformSettings.announcement && <div role="status" className="border-t border-amber-300/40 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-950 dark:border-amber-300/10 dark:bg-amber-500/10 dark:text-amber-100">{platformSettings.announcement}</div>}
 
-      {(authError || workspaceSetupError) && <div role="alert" className="mx-auto max-w-7xl px-4 pb-2 sm:px-6">
-        <p className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">{authError || workspaceSetupError}</p>
+      {(authError || workspaceSetupError || financeSyncError) && <div role="alert" className="mx-auto max-w-7xl px-4 pb-2 sm:px-6">
+        <p className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">{authError || workspaceSetupError || financeSyncError}</p>
       </div>}
 
       {isMobileMenuOpen && <div className="border-t border-slate-200/80 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#0B101B] sm:px-6 2xl:hidden">

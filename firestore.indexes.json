@@ -1,0 +1,17 @@
+{
+  "indexes": [
+    { "collectionGroup": "accounts", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "debts", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "budgets", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "savings_goals", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "commitments", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "recurring_transactions", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "goal_allocations", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "project_items", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "audit_logs", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "daily_savings", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] },
+    { "collectionGroup": "todo_items", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "visibility", "order": "ASCENDING" }, { "fieldPath": "sharedWith", "arrayConfig": "CONTAINS" }] }
+  ],
+  "fieldOverrides": []
+}
