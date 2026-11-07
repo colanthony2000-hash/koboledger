@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { formatMinor } from '../services/ledgerEngine';
 import { Transaction, TransactionType } from '../types/finance';
+import { formatTimestamp } from '../services/dateTime';
 import {
   Search,
   Filter,
@@ -88,11 +89,12 @@ export const LedgerView: React.FC = () => {
 
   // CSV Export (Section 1)
   const handleExportCSV = () => {
-    const headers = ['Transaction ID', 'Status', 'Effective Date', 'Type', 'Description', 'Amount Minor', 'Currency', 'Revision Group'];
+    const headers = ['Transaction ID', 'Status', 'Effective Date', 'Recorded Timestamp', 'Type', 'Description', 'Amount Minor', 'Currency', 'Revision Group'];
     const rows = visibleTxs.map((t) => [
       t.id,
       t.status,
       t.effective_date,
+      t.created_at,
       t.type,
       `"${t.description.replace(/"/g, '""')}"`,
       t.amount_minor,
@@ -234,7 +236,7 @@ export const LedgerView: React.FC = () => {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-100 dark:border-white/5 bg-slate-50/70 dark:bg-white/[0.02] text-slate-400 uppercase tracking-widest font-semibold text-[10px]">
-                <th className="py-3.5 px-5">Date</th>
+                <th className="py-3.5 px-5">Effective Date &amp; Recorded Time</th>
                 <th className="py-3.5 px-5">Description & Category</th>
                 <th className="py-3.5 px-5">Type</th>
                 <th className="py-3.5 px-5">Status & Invariant</th>
@@ -273,9 +275,10 @@ export const LedgerView: React.FC = () => {
                           isReversed ? 'opacity-50 bg-slate-50/40 dark:bg-black/20' : ''
                         }`}
                       >
-                        {/* Effective Date (INV-08) */}
-                        <td className="py-4 px-5 font-mono whitespace-nowrap text-slate-500 dark:text-slate-400">
-                          {tx.effective_date}
+                        {/* Effective Date (INV-08) and immutable posting timestamp */}
+                        <td className="py-4 px-5 whitespace-nowrap text-slate-500 dark:text-slate-400">
+                          <time dateTime={tx.effective_date} className="block font-mono">{tx.effective_date}</time>
+                          <time dateTime={tx.created_at} title={`Recorded at ${tx.created_at}`} className="mt-1 block text-[10px] text-slate-400 dark:text-slate-500">Recorded {formatTimestamp(tx.created_at)}</time>
                         </td>
 
                         {/* Description & Type */}

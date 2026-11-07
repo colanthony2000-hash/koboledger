@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { calculateAccountBalances, formatMinor } from '../services/ledgerEngine';
+import { formatTimestamp } from '../services/dateTime';
 import {
   Wallet,
   Building2,
@@ -791,6 +792,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                     <span>·</span>
                     <span className="capitalize">{tx.type.replace('_', ' ')}</span>
                   </div>
+                  <time dateTime={tx.created_at} title={`Recorded at ${tx.created_at}`} className="block text-[10px] text-slate-400 dark:text-slate-500">Recorded {formatTimestamp(tx.created_at)}</time>
                 </div>
 
                 <div className="text-right">

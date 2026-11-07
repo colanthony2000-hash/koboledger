@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { formatMinor } from '../services/ledgerEngine';
+import { formatTimestamp } from '../services/dateTime';
 import { Transaction } from '../types/finance';
 import {
   X,
@@ -80,6 +81,7 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
     const headers = [
       'Transaction ID',
       'Effective Date',
+      'Recorded Timestamp',
       'Type',
       'Description',
       'Category',
@@ -103,6 +105,7 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
       return [
         t.id,
         t.effective_date,
+        t.created_at,
         t.type,
         `"${t.description.replace(/"/g, '""')}"`,
         `"${cat?.name || 'Uncategorized'}"`,
@@ -332,6 +335,7 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
             <thead>
               <tr>
                 <th style="width: 75px;">Date</th>
+                <th>Recorded At</th>
                 <th>Description</th>
                 <th>Category</th>
                 <th>Account</th>
@@ -348,6 +352,7 @@ export const ExportLedgerModal: React.FC<ExportLedgerModalProps> = ({ isOpen, on
                   return `
                     <tr>
                       <td style="font-family: monospace;">${t.effective_date}</td>
+                      <td style="font-family: monospace;">${formatTimestamp(t.created_at)}</td>
                       <td><strong>${t.description}</strong></td>
                       <td>${cat?.name || 'General'}</td>
                       <td>${acc?.name || 'Ledger'}</td>
