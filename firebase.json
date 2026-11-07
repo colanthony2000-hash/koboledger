@@ -1,4 +1,11 @@
 {
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "runtime": "nodejs22"
+    }
+  ],
   "firestore": [
     {
       "database": "ai-studio-koboledgerperson-d3c2aa84-4cfb-4aa9-ade0-d53402b35132",

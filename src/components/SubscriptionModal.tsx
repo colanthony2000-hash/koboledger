@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { X } from 'lucide-react';
 
@@ -17,7 +17,14 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     isSubscriptionModalOpen,
     closeSubscriptionModal,
     requestedFeature,
+    firebaseUser,
+    startSubscriptionCheckout,
+    platformSettings,
   } = useFinance();
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState('');
+  // Payment Functions are deployed only after PAYSTACK_SECRET_KEY is stored in Secret Manager.
+  const secureCheckoutReady = false;
 
   const isOpen = propIsOpen !== undefined ? propIsOpen : isSubscriptionModalOpen;
   const onClose = propOnClose || closeSubscriptionModal;
@@ -63,10 +70,28 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
         {/* Content Area */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
-          <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-sm text-amber-900 dark:text-amber-200">
-            {activeFeatureRequested ? `${activeFeatureRequested} is not available as a paid feature yet. ` : ''}
-            Paid upgrades are temporarily unavailable. Checkout must verify payments on a trusted server before activating an account.
+          <p className="text-sm text-slate-600 dark:text-slate-300">{activeFeatureRequested ? `Unlock ${activeFeatureRequested} and more with KoboLedger Pro.` : 'Choose a plan to unlock the full KoboLedger experience.'} Payment is securely verified before Pro access is enabled.</p>
+          {!firebaseUser && <div className="p-3 rounded-xl border border-blue-500/30 bg-blue-500/10 text-sm text-blue-900 dark:text-blue-200">Sign in or create a KoboLedger account before purchasing so your plan is attached to your account.</div>}
+          {!secureCheckoutReady && <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-sm text-amber-900 dark:text-amber-200">Secure checkout is not activated yet. Your plan options are shown, but payment will open after JENECONK finishes connecting Paystack.</div>}
+          {checkoutError && <div role="alert" className="p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-700 dark:text-rose-300">{checkoutError}</div>}
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              { id: 'weekly', name: 'Weekly', price: platformSettings.plans.weekly.amountMinor, detail: `${platformSettings.plans.weekly.durationDays} days` },
+              { id: 'monthly', name: 'Monthly', price: platformSettings.plans.monthly.amountMinor, detail: `${platformSettings.plans.monthly.durationDays} days` },
+              { id: 'annual', name: 'Annual', price: platformSettings.plans.annual.amountMinor, detail: `${platformSettings.plans.annual.durationDays} days` },
+            ].map((plan) => <div key={plan.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-4 flex flex-col gap-2">
+              <div className="font-semibold text-slate-900 dark:text-white">{plan.name}</div>
+              <div className="text-xl font-extrabold text-slate-900 dark:text-white">{new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 2 }).format(plan.price / 100)}<span className="text-xs font-medium text-slate-500"> / {plan.detail}</span></div>
+              <button disabled={!firebaseUser || !secureCheckoutReady || loadingPlan !== null} onClick={async () => {
+                setCheckoutError(''); setLoadingPlan(plan.id);
+                try { await startSubscriptionCheckout(plan.id as 'weekly' | 'monthly' | 'annual'); }
+                catch { setCheckoutError('Checkout could not start. Please try again later.'); setLoadingPlan(null); }
+              }} className="mt-2 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-2 text-sm font-bold disabled:opacity-50">
+                {loadingPlan === plan.id ? 'Opening checkout…' : 'Choose plan'}
+              </button>
+            </div>)}
           </div>
+          <p className="text-xs text-slate-500">You’ll complete payment on Paystack. KoboLedger activates your subscription only after the server confirms payment.</p>
         </div>
       </div>
     </div>

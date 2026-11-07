@@ -32,6 +32,13 @@ export const UserProfileModal: React.FC = () => {
   const details = profile.details;
 
   const getRoleBadge = (role: string) => {
+    if (!firebaseUser) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+          DEMO PROFILE · NOT SIGNED IN
+        </span>
+      );
+    }
     switch (role) {
       case 'owner':
         return (

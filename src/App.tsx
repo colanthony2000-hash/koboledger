@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FinanceProvider } from './context/FinanceContext';
+import { useFinance } from './context/FinanceContext';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { LedgerView } from './components/LedgerView';
@@ -11,7 +12,38 @@ import { AcceptanceTestsView } from './components/AcceptanceTestsView';
 import { QuickAddModal } from './components/QuickAddModal';
 import { BackupModal } from './components/BackupModal';
 import { SubscriptionModal } from './components/SubscriptionModal';
+import { HouseholdModal } from './components/HouseholdModal';
 import { UserProfileModal } from './components/UserProfileModal';
+import { PlatformAdminModal } from './components/PlatformAdminModal';
+import { TodoView } from './components/TodoView';
+
+function TodoReminderAgent() {
+  const { todoItems } = useFinance();
+
+  useEffect(() => {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || localStorage.getItem('kl_todo_notifications_enabled') !== 'true') return;
+    const checkReminders = () => {
+      const now = Date.now();
+      for (const task of todoItems) {
+        if (task.completed || !task.reminderAt || new Date(task.reminderAt).getTime() > now) continue;
+        const key = `kl_todo_reminded_${task.id}_${task.reminderAt}`;
+        if (localStorage.getItem(key)) continue;
+        localStorage.setItem(key, 'true');
+        const title = 'KoboLedger task reminder';
+        const options: NotificationOptions = { body: task.title, tag: key, icon: '/icons/koboledger-192.png' };
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((registration) => registration.showNotification(title, options))
+            .catch(() => new Notification(title, options));
+        } else new Notification(title, options);
+      }
+    };
+    checkReminders();
+    const timer = window.setInterval(checkReminders, 30_000);
+    return () => window.clearInterval(timer);
+  }, [todoItems]);
+
+  return null;
+}
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
@@ -31,6 +63,7 @@ export default function App() {
 
   return (
     <FinanceProvider>
+      <TodoReminderAgent />
       <div className="min-h-screen bg-[#F8F9FC] dark:bg-[#080B11] text-slate-900 dark:text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
         {/* Top Navigation Bar with JENECONK Branding */}
         <Header
@@ -61,6 +94,8 @@ export default function App() {
 
           {currentTab === 'commitments' && <CommitmentsView />}
 
+          {currentTab === 'todos' && <TodoView />}
+
           {currentTab === 'tests' && <AcceptanceTestsView />}
         </main>
 
@@ -76,7 +111,9 @@ export default function App() {
         />
 
         <SubscriptionModal />
+        <HouseholdModal />
         <UserProfileModal />
+        <PlatformAdminModal />
 
         {/* Quiet Editorial Footer */}
         <footer className="border-t border-slate-200/80 dark:border-white/5 bg-white dark:bg-[#0E131F] py-6 text-xs text-slate-500 transition-colors">

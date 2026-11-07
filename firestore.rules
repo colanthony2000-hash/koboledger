@@ -1,130 +1,209 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Default deny catch-all
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    function isSignedIn() {
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function isValidId(id) {
+    function validId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Scoped Read access: Owner or explicitly listed in sharedWith
+    function workspaceMember(workspaceId) {
+      return signedIn()
+        && workspaceId is string
+        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+
+    function workspaceRole(workspaceId) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.role;
+    }
+
+    function canWriteWorkspace(workspaceId) {
+      return workspaceMember(workspaceId) && workspaceRole(workspaceId) in ['owner', 'member'];
+    }
+
+    function isHouseholdOwner(workspaceId) {
+      return workspaceMember(workspaceId) && workspaceRole(workspaceId) == 'owner';
+    }
+
     function canReadDoc() {
-      return isSignedIn() && (
+      return signedIn() && (
         resource.data.owner_user_id == request.auth.uid ||
-        request.auth.uid in resource.data.get('sharedWith', [])
+        (resource.data.visibility == 'shared'
+          && resource.data.get('sharedWith', []) is list
+          && request.auth.uid in resource.data.get('sharedWith', [])
+          && workspaceMember(resource.data.workspace_id))
       );
     }
 
-    // Users Collection: Private to owner, prevents privilege escalation
+    function canCreateRecord(workspaceId) {
+      return signedIn()
+        && workspaceMember(workspaceId)
+        && canWriteWorkspace(workspaceId)
+        && request.resource.data.workspace_id == workspaceId
+        && request.resource.data.owner_user_id == request.auth.uid
+        && request.resource.data.visibility in ['private', 'shared']
+        && request.resource.data.sharedWith is list
+        && request.auth.uid in request.resource.data.sharedWith;
+    }
+
+    function canUpdateRecord(workspaceId) {
+      return canReadDoc()
+        && canWriteWorkspace(workspaceId)
+        && request.resource.data.workspace_id == resource.data.workspace_id
+        && request.resource.data.owner_user_id == resource.data.owner_user_id
+        && request.resource.data.visibility in ['private', 'shared']
+        && request.resource.data.sharedWith is list;
+    }
+
+    function canDeleteRecord(workspaceId) {
+      return canReadDoc() && canWriteWorkspace(workspaceId);
+    }
+
+    // A profile is private. Roles and workspace membership are managed by trusted functions.
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false; // Disallow scraping entire user directory
-      allow create: if isOwner(userId) && incoming().uid == request.auth.uid;
-      allow update: if isOwner(userId)
-        && incoming().uid == existing().uid
-        && !incoming().diff(existing()).affectedKeys().hasAny(['role', 'workspaceId']);
-      allow delete: if isOwner(userId); // Allows GDPR account deletion
-    }
-
-    // Accounts Collection: Scoped to owner or sharedWith, blocks owner flipping
-    match /accounts/{accountId} {
-      allow get, list: if canReadDoc();
-      allow create: if isSignedIn() && isValidId(accountId)
-        && incoming().owner_user_id == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(accountId)
-        && existing().owner_user_id == request.auth.uid
-        && incoming().owner_user_id == existing().owner_user_id;
-      allow delete: if isSignedIn() && isValidId(accountId)
-        && existing().owner_user_id == request.auth.uid;
-    }
-
-    // Transactions Collection: Strict append-only immutable ledger
-    match /transactions/{transactionId} {
-      allow get, list: if canReadDoc();
-      allow create: if isSignedIn() && isValidId(transactionId)
-        && incoming().owner_user_id == request.auth.uid
-        && incoming().amount_minor is int && incoming().amount_minor > 0;
-      allow update: if false; // IMMUTABLE LEDGER: Reversals only via new transactions
-      allow delete: if false; // APPEND-ONLY: Never delete posted transactions
-    }
-
-    // Categories Collection: Scoped categorization
-    match /categories/{categoryId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(categoryId);
-      allow update: if isSignedIn() && isValidId(categoryId)
-        && (existing().get('owner_user_id', '') == request.auth.uid || !('owner_user_id' in existing()));
+      allow get: if signedIn() && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == resource.data.uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'workspaceId', 'subscription']);
       allow delete: if false;
     }
 
-    // Debts Collection: Scoped ownership with positive principal validation
+    match /workspaces/{workspaceId} {
+      allow get: if workspaceMember(workspaceId);
+      allow list, create, delete: if false;
+      allow update: if isHouseholdOwner(workspaceId)
+        && request.resource.data.owner_user_id == resource.data.owner_user_id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'updatedAt']);
+
+      match /members/{memberId} {
+        allow get: if signedIn() && request.auth.uid == memberId;
+        allow list, create, update, delete: if false;
+      }
+    }
+
+    match /householdInvites/{inviteId} {
+      allow read, write: if false;
+    }
+
+    match /platformAdminAudit/{auditId} {
+      allow read, write: if false;
+    }
+
+    function accountCreate(accountId) {
+      return validId(accountId) && canCreateRecord(request.resource.data.workspace_id);
+    }
+
+    match /accounts/{accountId} {
+      allow get, list: if canReadDoc();
+      allow create: if accountCreate(accountId);
+      allow update: if validId(accountId) && canUpdateRecord(resource.data.workspace_id);
+      allow delete: if validId(accountId) && canDeleteRecord(resource.data.workspace_id);
+    }
+
+    match /transactions/{transactionId} {
+      allow get, list: if canReadDoc();
+      allow create: if validId(transactionId)
+        && canCreateRecord(request.resource.data.workspace_id)
+        && request.resource.data.amount_minor is int
+        && request.resource.data.amount_minor > 0;
+      allow update, delete: if false;
+    }
+
     match /debts/{debtId} {
       allow get, list: if canReadDoc();
-      allow create: if isSignedIn() && isValidId(debtId)
-        && incoming().owner_user_id == request.auth.uid
-        && incoming().principal_minor is int && incoming().principal_minor > 0;
-      allow update: if isSignedIn() && isValidId(debtId)
-        && existing().owner_user_id == request.auth.uid
-        && incoming().owner_user_id == existing().owner_user_id;
-      allow delete: if isSignedIn() && isValidId(debtId)
-        && existing().owner_user_id == request.auth.uid;
+      allow create: if validId(debtId)
+        && canCreateRecord(request.resource.data.workspace_id)
+        && request.resource.data.principal_minor is int
+        && request.resource.data.principal_minor > 0;
+      allow update: if validId(debtId) && canUpdateRecord(resource.data.workspace_id);
+      allow delete: if validId(debtId) && canDeleteRecord(resource.data.workspace_id);
     }
 
-    // Budgets Collection: Scoped ownership
     match /budgets/{budgetId} {
       allow get, list: if canReadDoc();
-      allow create: if isSignedIn() && isValidId(budgetId)
-        && incoming().owner_user_id == request.auth.uid
-        && incoming().limit_minor is int && incoming().limit_minor > 0;
-      allow update: if isSignedIn() && isValidId(budgetId)
-        && existing().owner_user_id == request.auth.uid
-        && incoming().owner_user_id == existing().owner_user_id;
-      allow delete: if isSignedIn() && isValidId(budgetId)
-        && existing().owner_user_id == request.auth.uid;
+      allow create: if validId(budgetId)
+        && canCreateRecord(request.resource.data.workspace_id)
+        && request.resource.data.limit_minor is int
+        && request.resource.data.limit_minor > 0;
+      allow update: if validId(budgetId) && canUpdateRecord(resource.data.workspace_id);
+      allow delete: if validId(budgetId) && canDeleteRecord(resource.data.workspace_id);
     }
 
-    // Savings Goals Collection: Scoped ownership
     match /savings_goals/{goalId} {
       allow get, list: if canReadDoc();
-      allow create: if isSignedIn() && isValidId(goalId)
-        && incoming().owner_user_id == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(goalId)
-        && existing().owner_user_id == request.auth.uid
-        && incoming().owner_user_id == existing().owner_user_id;
-      allow delete: if isSignedIn() && isValidId(goalId)
-        && existing().owner_user_id == request.auth.uid;
+      allow create: if validId(goalId) && canCreateRecord(request.resource.data.workspace_id);
+      allow update: if validId(goalId) && canUpdateRecord(resource.data.workspace_id);
+      allow delete: if validId(goalId) && canDeleteRecord(resource.data.workspace_id);
     }
 
-    // Commitments Collection: Scoped ownership
     match /commitments/{commitmentId} {
       allow get, list: if canReadDoc();
-      allow create: if isSignedIn() && isValidId(commitmentId)
-        && incoming().owner_user_id == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(commitmentId)
-        && existing().owner_user_id == request.auth.uid
-        && incoming().owner_user_id == existing().owner_user_id;
-      allow delete: if isSignedIn() && isValidId(commitmentId)
-        && existing().owner_user_id == request.auth.uid;
+      allow create: if validId(commitmentId) && canCreateRecord(request.resource.data.workspace_id);
+      allow update: if validId(commitmentId) && canUpdateRecord(resource.data.workspace_id);
+      allow delete: if validId(commitmentId) && canDeleteRecord(resource.data.workspace_id);
+    }
+
+    match /recurring_transactions/{recordId} {
+      allow get, list: if canReadDoc();
+      allow create: if validId(recordId) && canCreateRecord(request.resource.data.workspace_id);
+      allow update: if validId(recordId) && canUpdateRecord(resource.data.workspace_id);
+      allow delete: if validId(recordId) && canDeleteRecord(resource.data.workspace_id);
+    }
+
+    match /goal_allocations/{recordId} {
+      allow get, list: if canReadDoc();
+      allow create: if validId(recordId) && canCreateRecord(request.resource.data.workspace_id);
+      allow update: if validId(recordId) && canUpdateRecord(resource.data.workspace_id);
+      allow delete: if validId(recordId) && canDeleteRecord(resource.data.workspace_id);
+    }
+
+    match /project_items/{recordId} {
+      allow get, list: if canReadDoc();
+      allow create: if validId(recordId) && canCreateRecord(request.resource.data.workspace_id);
+      allow update: if validId(recordId) && canUpdateRecord(resource.data.workspace_id);
+      allow delete: if validId(recordId) && canDeleteRecord(resource.data.workspace_id);
+    }
+
+    match /audit_logs/{recordId} {
+      allow get, list: if canReadDoc();
+      allow create: if validId(recordId) && canCreateRecord(request.resource.data.workspace_id);
+      allow update, delete: if false;
+    }
+
+    match /daily_savings/{recordId} {
+      allow get, list: if canReadDoc();
+      allow create: if validId(recordId) && canCreateRecord(request.resource.data.workspace_id);
+      allow update: if validId(recordId) && canUpdateRecord(resource.data.workspace_id);
+      allow delete: if validId(recordId) && canDeleteRecord(resource.data.workspace_id);
+    }
+
+    match /todo_items/{todoId} {
+      allow get, list: if canReadDoc();
+      allow create: if validId(todoId) && canCreateRecord(request.resource.data.workspace_id);
+      allow update: if validId(todoId) && canUpdateRecord(resource.data.workspace_id);
+      allow delete: if validId(todoId) && canDeleteRecord(resource.data.workspace_id);
+    }
+
+    // Paid entitlements are only written by server-side payment verification.
+    match /subscriptions/{userId} {
+      allow get: if signedIn() && request.auth.uid == userId;
+      allow list, create, update, delete: if false;
+    }
+
+    match /categories/{categoryId} {
+      allow get, list: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

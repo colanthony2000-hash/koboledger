@@ -452,7 +452,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                 Accelerate Debt Freedom & Smart Household Budgeting
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-                Subscription plans are being prepared. Paid features will become available after secure checkout is configured.
+                Unlock these tools with KoboLedger Pro. Checkout opens securely through Paystack, and access starts only after payment is verified by JENECONK’s server.
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
                 <div className="flex items-center gap-1.5 text-amber-200">

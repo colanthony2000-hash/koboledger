@@ -19,6 +19,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
     budgets,
     projectItems,
     auditLogs,
+    todoItems,
     firebaseUser,
     resetToDefaultSeed,
   } = useFinance();
@@ -44,6 +45,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
         budgets,
         projectItems,
         auditLogs,
+        todoItems,
       },
     };
 
@@ -75,6 +77,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
       localStorage.setItem(`${prefix}budgets`, JSON.stringify(parsed.data.budgets));
       localStorage.setItem(`${prefix}project_items`, JSON.stringify(parsed.data.projectItems));
       localStorage.setItem(`${prefix}audit_logs`, JSON.stringify(parsed.data.auditLogs));
+      localStorage.setItem(`${prefix}todo_items`, JSON.stringify(Array.isArray(parsed.data.todoItems) ? parsed.data.todoItems : []));
 
       setRestoreStatus('Backup successfully verified and restored! Reloading workspace...');
       setTimeout(() => {
@@ -124,7 +127,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isOpen, onClose }) => 
                 Export Full Workspace JSON
               </span>
               <span className="text-slate-500 text-[11px] mt-0.5 block">
-                Exports all {transactions.length} transactions, posting lines, debts, and budgets.
+                Exports transactions, debts, budgets, and To‑Do tasks for backup or transfer.
               </span>
             </div>
             <button

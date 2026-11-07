@@ -82,6 +82,20 @@ export interface Category {
   color?: string;
 }
 
+export interface TodoItem {
+  id: string;
+  title: string;
+  notes?: string;
+  dueAt?: string;
+  reminderAt?: string;
+  completed: boolean;
+  createdAt: string;
+  updatedAt: string;
+  owner_user_id?: string;
+  workspace_id?: string;
+  visibility?: Visibility;
+}
+
 export type DebtTermType =
   | 'D-1_interest_free'
   | 'D-2_reducing_balance'
@@ -221,7 +235,7 @@ export interface UserSubscription {
   billingCycle?: SubscriptionBilling;
   status: 'active' | 'free' | 'expired';
   expiresAt?: string;
-  paymentMethod?: 'paystack' | 'manual_bank_transfer';
+  paymentMethod?: 'paystack' | 'manual_bank_transfer' | 'admin_comp';
   paymentReference?: string;
   amountPaidMinor?: number;
 }

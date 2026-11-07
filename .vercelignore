@@ -1,4 +1,5 @@
 .env*
 .git
 .vercel
+.deploy-core
 node_modules

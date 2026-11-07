@@ -23,6 +23,7 @@ import {
   UserSubscription,
   RecurringTransaction,
   DailySavingsSetting,
+  TodoItem,
 } from '../types/finance';
 import {
   buildPostingLinesForTemplate,
@@ -40,8 +41,35 @@ import {
   persistTransaction,
   persistUserProfile,
   listenToTransactions,
+  ensureWorkspace,
+  listMyWorkspaces,
+  listHouseholdMembers,
+  createHouseholdInvite,
+  acceptHouseholdInvite,
+  removeHouseholdMember,
+  setActiveWorkspace as setSyncWorkspace,
+  listenToSubscription,
+  startPaystackCheckout,
+  verifyPaystackCheckout,
+  persistRecords,
+  listenToRecords,
+  WorkspaceMembership,
+  HouseholdMember,
+  PlatformAccount,
+  listPlatformAccounts,
+  setPlatformAccountDisabled,
+  refreshPlatformAdminAccess,
+  PlatformSettings,
+  DEFAULT_PLATFORM_SETTINGS,
+  getPublicPlatformSettings,
+  updatePlatformSettings,
+  setPlatformSubscription,
+  saveGlobalCategory,
+  listenToGlobalCategories,
+  persistTodoItem,
+  deleteTodoItem as deleteRemoteTodoItem,
 } from '../services/firebaseSync';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { getIdTokenResult, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 // Seed Users for Household Sharing & Corporate Audit (Section 5, T-21)
 export const SEED_USERS: UserProfile[] = [
@@ -1273,8 +1301,37 @@ interface FinanceContextType {
   firebaseUser: FirebaseUser | null;
   isFirebaseConnected: boolean;
   isSyncing: boolean;
+  authError: string | null;
+  workspaceSetupError: string | null;
+  isPlatformAdmin: boolean;
+  platformSettings: PlatformSettings;
+  savePlatformSettings: (settings: PlatformSettings) => Promise<void>;
+  changeCustomerSubscription: (uid: string, action: 'grant' | 'revoke', reason: string, days: number) => Promise<void>;
+  saveCategoryForAll: (category: Category) => Promise<void>;
+  platformAccounts: PlatformAccount[];
+  refreshPlatformAccounts: () => Promise<void>;
+  setPlatformAccountStatus: (uid: string, disabled: boolean) => Promise<void>;
+  isAdminModalOpen: boolean;
+  openAdminModal: () => void;
+  closeAdminModal: () => void;
   signInGoogle: () => Promise<void>;
   signOutGoogle: () => Promise<void>;
+  workspaces: WorkspaceMembership[];
+  activeWorkspace: WorkspaceMembership | null;
+  householdMembers: HouseholdMember[];
+  refreshHousehold: () => Promise<void>;
+  inviteHouseholdMember: (email: string, role: 'member' | 'auditor') => Promise<string>;
+  removeHouseholdMemberById: (memberId: string) => Promise<void>;
+  selectWorkspace: (workspaceId: string) => Promise<void>;
+  isHouseholdModalOpen: boolean;
+  openHouseholdModal: () => void;
+  closeHouseholdModal: () => void;
+  startSubscriptionCheckout: (plan: 'weekly' | 'monthly' | 'annual') => Promise<void>;
+  todoItems: TodoItem[];
+  addTodoItem: (input: Pick<TodoItem, 'title' | 'notes' | 'dueAt' | 'reminderAt' | 'visibility'>) => void;
+  updateTodoItem: (id: string, updates: Partial<Pick<TodoItem, 'title' | 'notes' | 'dueAt' | 'reminderAt' | 'completed' | 'visibility'>>) => void;
+  deleteTodoItem: (id: string) => void;
+  enableTodoReminders: () => Promise<NotificationPermission | 'unsupported'>;
   // Actions
   postTransaction: (tx: Omit<Transaction, 'id' | 'created_at' | 'status' | 'posting_lines'>, postingLines?: any[]) => void;
   editTransaction: (originalTx: Transaction, updated: any) => void;
@@ -1282,7 +1339,7 @@ interface FinanceContextType {
   withdrawGoalFunds: (goalId: string, accountId: string, amountMinor: number, reason: string) => { success: boolean; error?: string };
   toggleGoalLock: (goalId: string) => void;
   markCommitmentPaid: (commitmentId: string, categoryId: string, accountId: string) => void;
-  addAccount: (acc: Omit<Account, 'id'>) => void;
+  addAccount: (acc: Omit<Account, 'id'>) => string;
   reconcileAccount: (accountId: string, statementBalanceMinor: number, statementDate: string) => void;
   addBudget: (budget: Omit<Budget, 'id' | 'limit_version'>) => void;
   updateBudgetLimit: (budgetId: string, newLimitMinor: number) => void;
@@ -1296,7 +1353,7 @@ const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 const FINANCE_STORAGE_KEYS = [
   'accounts', 'transactions', 'categories', 'goals', 'allocations', 'commitments',
   'debts', 'budgets', 'budget_alerts', 'project_items', 'audit_logs', 'subscription',
-  'recurring', 'daily_savings',
+  'recurring', 'daily_savings', 'todo_items',
 ] as const;
 
 function financeStorageKey(userId: string | null, key: string): string {
@@ -1380,6 +1437,46 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [dailySavings, setDailySavings] = useState<DailySavingsSetting>(() => {
     return readFinanceStorage(null, 'daily_savings', DEFAULT_DAILY_SAVINGS);
   });
+  const [todoItems, setTodoItems] = useState<TodoItem[]>(() => readFinanceStorage(null, 'todo_items', []));
+  const todoCloudReady = React.useRef(false);
+
+  const addTodoItem = (input: Pick<TodoItem, 'title' | 'notes' | 'dueAt' | 'reminderAt' | 'visibility'>) => {
+    const timestamp = new Date().toISOString();
+    const item: TodoItem = {
+      id: `todo_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      title: input.title.trim(),
+      notes: input.notes?.trim() || undefined,
+      dueAt: input.dueAt || undefined,
+      reminderAt: input.reminderAt || undefined,
+      completed: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      owner_user_id: firebaseUser?.uid || currentUser.id,
+      workspace_id: activeWorkspace?.id || firebaseUser?.uid || 'ws_main',
+      visibility: input.visibility || 'private',
+    };
+    setTodoItems((items) => [...items, item]);
+    if (firebaseUser) persistTodoItem(item).catch(() => console.warn('Could not save the task to cloud storage.'));
+  };
+
+  const updateTodoItem = (id: string, updates: Partial<Pick<TodoItem, 'title' | 'notes' | 'dueAt' | 'reminderAt' | 'completed' | 'visibility'>>) => {
+    setTodoItems((items) => items.map((item) => {
+      if (item.id !== id) return item;
+      const updated = { ...item, ...updates, updatedAt: new Date().toISOString() };
+      if (firebaseUser) persistTodoItem(updated).catch(() => console.warn('Could not update the task in cloud storage.'));
+      return updated;
+    }));
+  };
+
+  const deleteTodoItem = (id: string) => {
+    setTodoItems((items) => items.filter((item) => item.id !== id));
+    if (firebaseUser) deleteRemoteTodoItem(id).catch(() => console.warn('Could not delete the task from cloud storage.'));
+  };
+
+  const enableTodoReminders = async (): Promise<NotificationPermission | 'unsupported'> => {
+    if (!('Notification' in window)) return 'unsupported';
+    return Notification.requestPermission();
+  };
 
   // Subscription State & Commercial Monetization
   const [subscription, setSubscription] = useState<UserSubscription>(() => {
@@ -1416,6 +1513,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const updateSubscription = (sub: Partial<UserSubscription>) => {
+    if (firebaseUser) return; // Paid access is granted only from the verified server entitlement.
     setSubscription((prev) => {
       const updated = { ...prev, ...sub } as UserSubscription;
       return updated;
@@ -1436,11 +1534,113 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isWorkspaceReady, setIsWorkspaceReady] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [workspaceSetupError, setWorkspaceSetupError] = useState<string | null>(null);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(DEFAULT_PLATFORM_SETTINGS);
+  const [platformAccounts, setPlatformAccounts] = useState<PlatformAccount[]>([]);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const cloudSnapshotReady = React.useRef(false);
+  const transactionCloudReady = React.useRef(false);
+  const clearedLegacyCacheFor = React.useRef<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<WorkspaceMembership[]>([]);
+  const [activeWorkspace, setActiveWorkspaceState] = useState<WorkspaceMembership | null>(null);
+  const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
+  const [isHouseholdModalOpen, setIsHouseholdModalOpen] = useState(false);
+
+  const refreshPlatformAccounts = async () => {
+    if (!isPlatformAdmin) throw new Error('Platform administrator access is required.');
+    setPlatformAccounts(await listPlatformAccounts());
+  };
+
+  const setPlatformAccountStatus = async (uid: string, disabled: boolean) => {
+    if (!isPlatformAdmin) throw new Error('Platform administrator access is required.');
+    await setPlatformAccountDisabled(uid, disabled);
+    await refreshPlatformAccounts();
+  };
+
+  const savePlatformSettings = async (settings: PlatformSettings) => {
+    if (!isPlatformAdmin) throw new Error('Platform administrator access is required.');
+    setPlatformSettings(await updatePlatformSettings(settings));
+  };
+
+  const changeCustomerSubscription = async (uid: string, action: 'grant' | 'revoke', reason: string, days: number) => {
+    if (!isPlatformAdmin) throw new Error('Platform administrator access is required.');
+    await setPlatformSubscription(uid, action, reason, days);
+    await refreshPlatformAccounts();
+  };
+
+  const saveCategoryForAll = async (category: Category) => {
+    if (!isPlatformAdmin) throw new Error('Platform administrator access is required.');
+    await saveGlobalCategory(category);
+  };
+
+  const refreshHousehold = async () => {
+    const memberships = await listMyWorkspaces();
+    setWorkspaces(memberships);
+    const chosen = memberships.find((workspace) => workspace.id === activeWorkspace?.id) || memberships[0] || null;
+    setActiveWorkspaceState(chosen);
+    if (chosen) {
+      const members = await listHouseholdMembers(chosen.id);
+      setHouseholdMembers(members);
+      setSyncWorkspace(chosen.id, members.map((member) => member.uid));
+    }
+  };
+
+  const selectWorkspace = async (workspaceId: string) => {
+    const chosen = workspaces.find((workspace) => workspace.id === workspaceId);
+    if (!chosen) return;
+    setActiveWorkspaceState(chosen);
+    const members = await listHouseholdMembers(chosen.id);
+    setHouseholdMembers(members);
+    setSyncWorkspace(chosen.id, members.map((member) => member.uid));
+    setCurrentUser((previous) => ({ ...previous, role: chosen.role }));
+  };
+
+  const inviteHouseholdMember = async (email: string, role: 'member' | 'auditor') => {
+    if (!activeWorkspace) throw new Error('Choose a workspace first.');
+    const invite = await createHouseholdInvite(activeWorkspace.id, email, role);
+    return `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(invite.token)}`;
+  };
+
+  const removeHouseholdMemberById = async (memberId: string) => {
+    if (!activeWorkspace) throw new Error('Choose a workspace first.');
+    await removeHouseholdMember(activeWorkspace.id, memberId);
+    await refreshHousehold();
+  };
+
+  const startSubscriptionCheckout = async (plan: 'weekly' | 'monthly' | 'annual') => {
+    const result = await startPaystackCheckout(plan);
+    window.location.assign(result.authorizationUrl);
+  };
+
+  const openHouseholdModal = () => setIsHouseholdModalOpen(true);
+  const closeHouseholdModal = () => setIsHouseholdModalOpen(false);
+  const openAdminModal = () => setIsAdminModalOpen(true);
+  const closeAdminModal = () => setIsAdminModalOpen(false);
+
+  useEffect(() => {
+    getPublicPlatformSettings().then(setPlatformSettings).catch(() => {
+      // Fall back to the published defaults if public settings are not deployed yet.
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!firebaseUser || !isWorkspaceReady) return;
+    return listenToGlobalCategories(setCategories);
+  }, [firebaseUser, isWorkspaceReady]);
 
   const persistFinanceState = (key: string, value: unknown) => {
     const userId = firebaseUser?.uid ?? null;
     if (hydratedStorageId !== (userId ?? 'demo')) return;
+    if (userId) return; // Authenticated finance state lives in Firestore, not plaintext browser storage.
     localStorage.setItem(financeStorageKey(userId, key), JSON.stringify(value));
+  };
+
+  const clearLegacyCacheIfCloudReady = (uid: string) => {
+    if (!cloudSnapshotReady.current || !transactionCloudReady.current || clearedLegacyCacheFor.current === uid) return;
+    for (const key of FINANCE_STORAGE_KEYS) localStorage.removeItem(financeStorageKey(uid, key));
+    clearedLegacyCacheFor.current = uid;
   };
 
   // Connection & Auth subscription (Phase 1)
@@ -1466,7 +1666,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const updatedProfile: UserProfile = {
           id: user.uid,
           name: user.displayName || user.email || 'Authenticated User',
-          role: 'owner',
+          // Until membership is confirmed by trusted workspace data, never assume owner rights.
+          role: 'member',
           avatar_initials: initials,
           email: user.email || undefined,
           photoURL: user.photoURL || undefined,
@@ -1474,11 +1675,48 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setCurrentUser(updatedProfile);
 
         try {
+          setWorkspaceSetupError(null);
           await persistUserProfile(updatedProfile);
+          await ensureWorkspace(`${user.displayName || 'My'} Workspace`);
+          const platformAdmin = await refreshPlatformAdminAccess();
+          const token = await getIdTokenResult(user, true);
+          setIsPlatformAdmin(platformAdmin && token.claims.platformAdmin === true);
+          const pendingInvite = new URLSearchParams(window.location.search).get('invite');
+          let invitedWorkspaceId: string | undefined;
+          if (pendingInvite && user.emailVerified) {
+            invitedWorkspaceId = (await acceptHouseholdInvite(pendingInvite)).workspaceId;
+            const url = new URL(window.location.href);
+            url.searchParams.delete('invite');
+            window.history.replaceState({}, '', url.toString());
+          }
+          const memberships = await listMyWorkspaces();
+          if (auth.currentUser?.uid !== user.uid) return;
+          setWorkspaces(memberships);
+          const chosen = memberships.find((workspace) => workspace.id === invitedWorkspaceId) || memberships[0] || null;
+          setActiveWorkspaceState(chosen);
+          if (chosen) {
+            const members = await listHouseholdMembers(chosen.id);
+            setHouseholdMembers(members);
+            setSyncWorkspace(chosen.id, members.map((member) => member.uid));
+            setCurrentUser({ ...updatedProfile, role: chosen.role });
+          }
           if (auth.currentUser?.uid === user.uid) setIsWorkspaceReady(true);
         } catch (err) {
-          console.warn('Could not initialize the private finance profile.');
+          const token = await getIdTokenResult(user).catch(() => null);
+          const platformAdmin = await refreshPlatformAdminAccess().catch(() => false);
+          setIsPlatformAdmin(platformAdmin && token?.claims.platformAdmin === true);
+          setWorkspaceSetupError('Sign-in succeeded, but workspace setup failed. If you opened a household invitation, verify this email address and try the invitation again. Household sync is unavailable until the Firebase backend responds.');
+          console.warn('Could not initialize cloud workspace.');
         }
+      } else {
+        setWorkspaces([]);
+        setActiveWorkspaceState(null);
+        setHouseholdMembers([]);
+        setIsPlatformAdmin(false);
+        setPlatformAccounts([]);
+        setWorkspaceSetupError(null);
+        setSyncWorkspace(null);
+        setIsWorkspaceReady(false);
       }
     });
 
@@ -1507,28 +1745,123 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDailySavings(readFinanceStorage<DailySavingsSetting>(userId, 'daily_savings', demoMode ? DEFAULT_DAILY_SAVINGS : {
       target_minor: 0, saved_today_minor: 0, last_reset_date: new Date().toISOString().slice(0, 10), streak_days: 0,
     }));
-    setSubscription(readFinanceStorage<UserSubscription>(userId, 'subscription', { tier: 'free', status: 'free' }));
+    setTodoItems(readFinanceStorage<TodoItem[]>(userId, 'todo_items', []));
+    todoCloudReady.current = false;
+    setSubscription(userId ? { tier: 'free', status: 'free' } : readFinanceStorage<UserSubscription>(null, 'subscription', { tier: 'free', status: 'free' }));
     setHydratedStorageId(storageId);
   }, [firebaseUser?.uid]);
 
   // Real-time Firestore transaction sync
   useEffect(() => {
     if (!firebaseUser || !isWorkspaceReady) return;
+    transactionCloudReady.current = false;
     setIsSyncing(true);
     const userId = firebaseUser.uid;
     const unsub = listenToTransactions(userId, (remoteTxs) => {
       setIsSyncing(false);
-      setTransactions(remoteTxs);
+      if (remoteTxs.length === 0 && transactions.length > 0) {
+        Promise.all(transactions.map((transaction) => persistTransaction(transaction)))
+          .then(() => {
+            transactionCloudReady.current = true;
+            clearLegacyCacheIfCloudReady(userId);
+          })
+          .catch(() => console.warn('Existing browser transactions could not be migrated to cloud storage.'));
+      } else {
+        setTransactions(remoteTxs);
+        transactionCloudReady.current = true;
+        clearLegacyCacheIfCloudReady(userId);
+      }
     });
     return () => unsub();
   }, [firebaseUser, isWorkspaceReady]);
 
+  useEffect(() => {
+    if (!firebaseUser) return;
+    const reference = new URLSearchParams(window.location.search).get('reference');
+    if (!reference) return;
+    verifyPaystackCheckout(reference).then(() => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('reference');
+      url.searchParams.delete('trxref');
+      window.history.replaceState({}, '', url.toString());
+    }).catch(() => console.warn('Payment verification did not complete. The account will update after provider confirmation.'));
+  }, [firebaseUser]);
+
+  // Cloud backed finance records. Local storage remains an offline cache; server snapshots
+  // replace it after sign-in, and subsequent local edits are written to Firestore.
+  useEffect(() => {
+    if (!firebaseUser || !isWorkspaceReady) return;
+    cloudSnapshotReady.current = false;
+    let firstSnapshots = 11;
+    const hydrate = (setter: (items: any[]) => void) => (items: any[]) => {
+      setter(items);
+      firstSnapshots -= 1;
+      if (firstSnapshots === 0) cloudSnapshotReady.current = true;
+    };
+    const collections: Array<[string, (items: any[]) => void, any[]]> = [
+      ['accounts', hydrate(setAccounts), accounts], ['debts', hydrate(setDebts), debts], ['budgets', hydrate(setBudgets), budgets],
+      ['savings_goals', hydrate(setSavingsGoals), savingsGoals], ['commitments', hydrate(setCommitments), commitments],
+      ['recurring_transactions', hydrate(setRecurringTransactions), recurringTransactions], ['goal_allocations', hydrate(setGoalAllocations), goalAllocations],
+      ['project_items', hydrate(setProjectItems), projectItems], ['audit_logs', hydrate(setAuditLogs), auditLogs], ['daily_savings', hydrate((items) => {
+        if (items[0]) setDailySavings(items[0] as DailySavingsSetting);
+      }), [{ id: firebaseUser.uid, ...dailySavings }]],
+      ['todo_items', hydrate((items) => {
+        setTodoItems(items as TodoItem[]);
+        todoCloudReady.current = true;
+      }), todoItems],
+    ];
+    const unsubscribers = collections.map(([name, setter, cachedItems]) => listenToRecords(name, firebaseUser.uid, (items) => {
+      if (items.length === 0 && cachedItems.length > 0) {
+        persistRecords(name, cachedItems).catch(() => console.warn('Existing browser finance data could not be migrated to cloud storage.'));
+        setter(cachedItems);
+      } else setter(items);
+    }));
+    const unsubSubscription = listenToSubscription(firebaseUser.uid, (remote) => {
+      if (!remote) {
+        setSubscription({ tier: 'free', status: 'free' });
+        return;
+      }
+      const expiresAt = typeof remote.expiresAt === 'string' ? remote.expiresAt : undefined;
+      const expired = expiresAt ? new Date(`${expiresAt}T23:59:59Z`).getTime() < Date.now() : false;
+      setSubscription({
+        tier: !expired && remote.tier === 'pro' ? 'pro' : 'free',
+        status: !expired && remote.status === 'active' ? 'active' : 'free',
+        billingCycle: remote.billingCycle as UserSubscription['billingCycle'],
+        expiresAt,
+      });
+    });
+    return () => { unsubscribers.forEach((unsubscribe) => unsubscribe()); unsubSubscription(); };
+  }, [firebaseUser, isWorkspaceReady]);
+
+  useEffect(() => {
+    if (!firebaseUser || !isWorkspaceReady || !cloudSnapshotReady.current) return;
+    const writes: Array<[string, any[]]> = [
+      ['accounts', accounts], ['debts', debts], ['budgets', budgets], ['savings_goals', savingsGoals],
+      ['commitments', commitments], ['recurring_transactions', recurringTransactions],
+      ['goal_allocations', goalAllocations], ['project_items', projectItems], ['audit_logs', auditLogs],
+      ['daily_savings', [{ id: firebaseUser.uid, ...dailySavings }]],
+      ['todo_items', todoItems],
+    ];
+    Promise.all(writes.map(([collectionName, records]) => persistRecords(collectionName, records)))
+      .then(() => clearLegacyCacheIfCloudReady(firebaseUser.uid))
+      .catch(() => console.warn('Cloud sync could not save a finance record.'));
+  }, [firebaseUser, isWorkspaceReady, accounts, debts, budgets, savingsGoals, commitments, recurringTransactions, goalAllocations, projectItems, auditLogs, dailySavings, todoItems]);
+
   const signInGoogle = async () => {
+    setAuthError(null);
     try {
       await loginWithGoogle();
     } catch (e) {
-      console.error('Google Sign-In failed:', e);
-      throw e;
+      const code = typeof e === 'object' && e !== null && 'code' in e ? String((e as { code: unknown }).code) : '';
+      const messages: Record<string, string> = {
+        'auth/unauthorized-domain': 'This website is not enabled for Firebase sign-in. Add koboledger.vercel.app to Firebase Authentication’s Authorized domains.',
+        'auth/operation-not-allowed': 'Google sign-in is disabled for this Firebase project. Enable Google in Authentication → Sign-in method.',
+        'auth/popup-blocked': 'Your browser blocked the Google sign-in window. Allow pop-ups for this website and try again.',
+        'auth/popup-closed-by-user': 'The Google sign-in window closed before sign-in finished.',
+        'auth/network-request-failed': 'The sign-in request could not reach Firebase. Check your connection and try again.',
+        'auth/invalid-api-key': 'Firebase rejected this app’s API key. Check the Firebase web app configuration.',
+      };
+      setAuthError(messages[code] || `Google sign-in could not complete${code ? ` (${code})` : ''}. Check the Firebase Authentication settings and try again.`);
     }
   };
 
@@ -1585,6 +1918,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     persistFinanceState('daily_savings', dailySavings);
   }, [dailySavings, firebaseUser?.uid, hydratedStorageId]);
+  useEffect(() => {
+    persistFinanceState('todo_items', todoItems);
+  }, [todoItems, firebaseUser?.uid, hydratedStorageId]);
 
   // Check budget thresholds on transaction updates with Deduplication Key (Section 6, T-04)
   useEffect(() => {
@@ -1941,7 +2277,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         account_id: id,
       };
       setTransactions((prev) => [initTx, ...prev]);
+      persistTransaction(initTx).catch(() => console.warn('Opening balance could not be saved to cloud storage.'));
     }
+    return id;
   };
 
   const reconcileAccount = (accountId: string, statementBalanceMinor: number, statementDate: string) => {
@@ -2221,6 +2559,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProjectItems(SEED_PROJECT_ITEMS);
     setRecurringTransactions(SEED_RECURRING);
     setDailySavings(DEFAULT_DAILY_SAVINGS);
+    setTodoItems([]);
     setAuditLogs([
       {
         id: `audit_reset_${Date.now()}`,
@@ -2274,8 +2613,37 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         firebaseUser,
         isFirebaseConnected,
         isSyncing,
+        authError,
+        workspaceSetupError,
+        isPlatformAdmin,
+        platformSettings,
+        savePlatformSettings,
+        changeCustomerSubscription,
+        saveCategoryForAll,
+        platformAccounts,
+        refreshPlatformAccounts,
+        setPlatformAccountStatus,
+        isAdminModalOpen,
+        openAdminModal,
+        closeAdminModal,
         signInGoogle,
         signOutGoogle,
+        workspaces,
+        activeWorkspace,
+        householdMembers,
+        refreshHousehold,
+        inviteHouseholdMember,
+        removeHouseholdMemberById,
+        selectWorkspace,
+        isHouseholdModalOpen,
+        openHouseholdModal,
+        closeHouseholdModal,
+        startSubscriptionCheckout,
+        todoItems,
+        addTodoItem,
+        updateTodoItem,
+        deleteTodoItem,
+        enableTodoReminders,
         postTransaction,
         editTransaction,
         postGoalContribution,
