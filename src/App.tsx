@@ -16,6 +16,7 @@ import { HouseholdModal } from './components/HouseholdModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { PlatformAdminModal } from './components/PlatformAdminModal';
 import { TodoView } from './components/TodoView';
+import { OwnerSettingsView } from './components/OwnerSettingsView';
 
 function TodoReminderAgent() {
   const { todoItems } = useFinance();
@@ -97,6 +98,8 @@ export default function App() {
           {currentTab === 'todos' && <TodoView />}
 
           {currentTab === 'tests' && <AcceptanceTestsView />}
+
+          {currentTab === 'owner-settings' && <OwnerSettingsView onOpenAudit={() => setCurrentTab('tests')} />}
         </main>
 
         {/* Core Modals */}

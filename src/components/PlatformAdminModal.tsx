@@ -5,7 +5,7 @@ import { Category } from '../types/finance';
 
 export const PlatformAdminModal: React.FC = () => {
   const {
-    isAdminModalOpen, closeAdminModal, isPlatformAdmin, platformAccounts,
+    isAdminModalOpen, adminModalFocus, closeAdminModal, isPlatformAdmin, platformAccounts,
     refreshPlatformAccounts, setPlatformAccountStatus, platformSettings,
     savePlatformSettings, changeCustomerSubscription,
     firebaseUser,
@@ -33,6 +33,14 @@ export const PlatformAdminModal: React.FC = () => {
   }, [isAdminModalOpen, isPlatformAdmin]);
 
   useEffect(() => {
+    if (!isAdminModalOpen || !isPlatformAdmin) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`owner-admin-${adminModalFocus}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [adminModalFocus, isAdminModalOpen, isPlatformAdmin]);
+
+  useEffect(() => {
     setPrices({
       weekly: String(platformSettings.plans.weekly.amountMinor / 100),
       monthly: String(platformSettings.plans.monthly.amountMinor / 100),
@@ -50,8 +58,16 @@ export const PlatformAdminModal: React.FC = () => {
       </header>
       <div className="max-h-[70vh] space-y-4 overflow-auto p-5">
         <p className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-100">Admins can make platform-wide pricing and announcement changes, suspend accounts, and grant or revoke Pro access. Private household ledgers, debts, budgets and transactions stay outside this console. Every admin change is recorded with the acting admin and its reason where relevant.</p>
+        <nav aria-label="Owner admin tools" className="sticky top-0 z-10 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-[#0E131F]/95 sm:grid-cols-4">
+          {([
+            ['settings', 'Platform settings'],
+            ['categories', 'Global categories'],
+            ['customers', 'Customer accounts'],
+            ['subscriptions', 'Pro access'],
+          ] as const).map(([section, label]) => <button key={section} type="button" onClick={() => document.getElementById(`owner-admin-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="min-h-10 rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-700 hover:border-amber-400 hover:bg-amber-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-amber-500/10">{label}</button>)}
+        </nav>
         {message && <p role="status" className="text-sm text-rose-700 dark:text-rose-300">{message}</p>}
-        <form className="grid gap-3 rounded-xl border border-slate-200 p-4 dark:border-white/10" onSubmit={async (event) => {
+        <form id="owner-admin-settings" className="scroll-mt-20 grid gap-3 rounded-xl border border-slate-200 p-4 dark:border-white/10" onSubmit={async (event) => {
           event.preventDefault(); setMessage('');
           try {
             await savePlatformSettings({
@@ -71,7 +87,7 @@ export const PlatformAdminModal: React.FC = () => {
           <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Customer announcement<textarea maxLength={280} value={announcement} onChange={(event) => setAnnouncement(event.target.value)} rows={2} placeholder="Optional notice shown in KoboLedger" className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2 text-sm dark:border-white/10 dark:bg-slate-900"/></label>
           <button className="justify-self-start rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white dark:bg-white dark:text-slate-900">Save platform settings</button>
         </form>
-        <form className="grid gap-3 rounded-xl border border-slate-200 p-4 dark:border-white/10" onSubmit={async (event) => {
+        <form id="owner-admin-categories" className="scroll-mt-20 grid gap-3 rounded-xl border border-slate-200 p-4 dark:border-white/10" onSubmit={async (event) => {
           event.preventDefault(); setMessage('');
           const id = categoryId || `cat_${categoryName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50)}`;
           try {
@@ -88,7 +104,13 @@ export const PlatformAdminModal: React.FC = () => {
           </div>
           <button className="justify-self-start rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white">Save category for all customers</button>
         </form>
+        <section id="owner-admin-customers" className="scroll-mt-20">
+        <h3 className="mb-2 text-sm font-bold text-slate-900 dark:text-white">Customer accounts</h3>
         {platformAccounts.length === 0 && !message ? <p className="text-sm text-slate-500">No customer accounts are listed yet.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-xs"><thead className="text-slate-500"><tr><th className="p-2">Customer</th><th className="p-2">Plan</th><th className="p-2">Last sign-in</th><th className="p-2">Account</th><th className="p-2">Control</th></tr></thead><tbody>{platformAccounts.map((account) => <tr key={account.uid} className="border-t border-slate-100 dark:border-white/5"><td className="p-2"><div className="font-semibold text-slate-800 dark:text-white">{account.displayName}</div><div className="text-slate-500">{account.email}</div></td><td className="p-2">{account.tier === 'pro' ? `Pro · ${account.expiresAt || 'active'}` : 'Free'}</td><td className="p-2">{account.lastSignInAt ? new Date(account.lastSignInAt).toLocaleDateString() : 'Not available'}</td><td className="p-2">{account.disabled ? <span className="text-rose-600">Suspended</span> : <span className="text-emerald-700 dark:text-emerald-300">Active</span>}</td><td className="flex gap-1 p-2"><button onClick={() => { setSelectedUid(account.uid); setMessage(''); }} className="rounded-lg border border-slate-200 px-2 py-1 font-semibold dark:border-white/10">Select</button><button disabled={busyUid === account.uid} onClick={async () => { setBusyUid(account.uid); setMessage(''); try { await setPlatformAccountStatus(account.uid, !account.disabled); } catch { setMessage('Could not change this account.'); } finally { setBusyUid(null); } }} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 font-semibold text-slate-700 disabled:opacity-50 dark:border-white/10 dark:text-slate-200">{account.disabled ? <><UserRoundCheck className="h-3.5 w-3.5"/>Restore</> : <><UserRoundX className="h-3.5 w-3.5"/>Suspend</>}</button></td></tr>)}</tbody></table></div>}
+        </section>
+        <section id="owner-admin-subscriptions" className="scroll-mt-20">
+        <h3 className="mb-2 text-sm font-bold text-slate-900 dark:text-white">Pro access</h3>
+        {!selectedUid && <p className="mb-2 text-xs text-slate-500">Select a customer above to grant or revoke Pro access.</p>}
         {selectedUid && <form className="grid gap-3 rounded-xl border border-amber-300/50 bg-amber-50/50 p-4 dark:border-amber-400/20 dark:bg-amber-500/5" onSubmit={(event) => event.preventDefault()}>
           <h3 className="text-sm font-bold text-slate-900 dark:text-white">Pro access override</h3>
           <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Selected customer<select value={selectedUid} onChange={(event) => setSelectedUid(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2 text-sm dark:border-white/10 dark:bg-slate-900">{platformAccounts.filter((account) => account.uid !== firebaseUser?.uid).map((account) => <option key={account.uid} value={account.uid}>{account.email || account.displayName}</option>)}</select></label>
@@ -98,6 +120,7 @@ export const PlatformAdminModal: React.FC = () => {
           </div>
           <div className="flex gap-2"><button disabled={!reason.trim() || busyUid === selectedUid} onClick={async () => { setBusyUid(selectedUid); try { await changeCustomerSubscription(selectedUid, 'grant', reason, grantDays); setMessage('Pro access granted and recorded.'); } catch { setMessage('Could not grant Pro access.'); } finally { setBusyUid(null); } }} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Grant Pro access</button><button disabled={!reason.trim() || busyUid === selectedUid} onClick={async () => { setBusyUid(selectedUid); try { await changeCustomerSubscription(selectedUid, 'revoke', reason, grantDays); setMessage('Pro access revoked and recorded.'); } catch { setMessage('Could not revoke Pro access.'); } finally { setBusyUid(null); } }} className="rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Revoke Pro access</button></div>
         </form>}
+        </section>
       </div>
     </section>
   </div>;

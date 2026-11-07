@@ -14,6 +14,7 @@ import {
   Lock,
   Home,
   Download,
+  Settings,
 } from 'lucide-react';
 
 interface InstallPromptEvent extends Event {
@@ -52,8 +53,8 @@ export const Header: React.FC<HeaderProps> = ({
     openSubscriptionModal,
     openUserProfileModal,
     openHouseholdModal,
-    openAdminModal,
     platformSettings,
+    isPlatformAdmin,
   } = useFinance();
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -84,6 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'projects', label: 'Christmas Plan' },
     { id: 'commitments', label: 'Commitments' },
     { id: 'todos', label: 'To‑Do' },
+    ...(isPlatformAdmin ? [{ id: 'owner-settings', label: 'Owner Settings' }] : []),
   ];
 
   const isPro = subscription.tier === 'pro' && subscription.status === 'active';
@@ -155,6 +157,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/5'
                 }`}
               >
+                {link.id === 'owner-settings' && <Settings className="mr-1.5 inline h-3.5 w-3.5" />}
                 {link.label}
               </button>
             );
@@ -176,7 +179,6 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Zone 3: Subscription Status, User Perspective & Primary CTA */}
         <div className="hidden 2xl:flex items-center gap-2 sm:gap-3 shrink-0">
           {installPrompt && <button onClick={installApp} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200" title="Install KoboLedger on this device"><Download className="h-3.5 w-3.5"/><span className="hidden sm:inline">Install app</span></button>}
-          {firebaseUser?.email?.toLowerCase() === 'jeneconklms@gmail.com' && <button onClick={openAdminModal} className="inline-flex items-center gap-1 rounded-xl border border-amber-400/50 bg-amber-400/10 px-2.5 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-400/20 dark:text-amber-300"><ShieldCheck className="h-3.5 w-3.5"/><span>Admin</span></button>}
           {/* Subscription Upgrade / Status Trigger */}
           {isPro ? (
             <button
@@ -327,13 +329,12 @@ export const Header: React.FC<HeaderProps> = ({
 
       {isMobileMenuOpen && <div className="border-t border-slate-200/80 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#0B101B] sm:px-6 2xl:hidden">
         <nav aria-label="Main navigation" className="grid grid-cols-2 gap-2">
-          {navLinks.map((link) => <button key={link.id} onClick={() => { setCurrentTab(link.id); setIsMobileMenuOpen(false); }} className={`flex min-h-11 min-w-0 items-center rounded-xl border px-3 py-2 text-left text-sm font-semibold transition-colors ${currentTab === link.id ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900' : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5'}`}>{link.label}</button>)}
+          {navLinks.map((link) => <button key={link.id} onClick={() => { setCurrentTab(link.id); setIsMobileMenuOpen(false); }} className={`flex min-h-11 min-w-0 items-center rounded-xl border px-3 py-2 text-left text-sm font-semibold transition-colors ${link.id === 'owner-settings' ? 'border-amber-300/70 bg-amber-50 text-amber-900 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200' : currentTab === link.id ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900' : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5'}`}>{link.id === 'owner-settings' && <Settings className="mr-2 h-4 w-4 shrink-0"/>}{link.label}</button>)}
           <button onClick={() => { onOpenTests(); setIsMobileMenuOpen(false); }} className={`flex min-h-11 min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm font-semibold ${currentTab === 'tests' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 text-slate-700 dark:border-white/10 dark:text-slate-200'}`}><ShieldCheck className="h-4 w-4 shrink-0"/>Audit</button>
         </nav>
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-200 pt-3 dark:border-white/10">
           {installPrompt && <button onClick={() => { installApp(); setIsMobileMenuOpen(false); }} className="flex min-h-11 items-center gap-2 rounded-xl border border-emerald-300 px-3 py-2 text-left text-sm font-semibold text-emerald-800 dark:border-emerald-500/30 dark:text-emerald-200"><Download className="h-4 w-4 shrink-0"/>Install app</button>}
           <button onClick={() => { openSubscriptionModal(); setIsMobileMenuOpen(false); }} className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-300 px-3 py-2 text-left text-sm font-semibold text-amber-800 dark:border-amber-500/30 dark:text-amber-200"><Crown className="h-4 w-4 shrink-0"/>Upgrade to Pro</button>
-          {firebaseUser && firebaseUser.email?.toLowerCase() === 'jeneconklms@gmail.com' && <button onClick={() => { openAdminModal(); setIsMobileMenuOpen(false); }} className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-300 px-3 py-2 text-left text-sm font-semibold text-amber-800 dark:border-amber-500/30 dark:text-amber-200"><ShieldCheck className="h-4 w-4 shrink-0"/>Owner admin</button>}
           {firebaseUser ? <>
             <button onClick={() => { openHouseholdModal(); setIsMobileMenuOpen(false); }} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-left text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200"><Home className="h-4 w-4 shrink-0"/>Household</button>
             <button onClick={() => { setIsMobileMenuOpen(false); void signOutGoogle(); }} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-left text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200"><LogOut className="h-4 w-4 shrink-0"/>Sign out</button>

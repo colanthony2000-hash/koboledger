@@ -1312,7 +1312,8 @@ interface FinanceContextType {
   refreshPlatformAccounts: () => Promise<void>;
   setPlatformAccountStatus: (uid: string, disabled: boolean) => Promise<void>;
   isAdminModalOpen: boolean;
-  openAdminModal: () => void;
+  adminModalFocus: 'settings' | 'categories' | 'customers' | 'subscriptions';
+  openAdminModal: (focus?: 'settings' | 'categories' | 'customers' | 'subscriptions') => void;
   closeAdminModal: () => void;
   signInGoogle: () => Promise<void>;
   signOutGoogle: () => Promise<void>;
@@ -1540,6 +1541,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(DEFAULT_PLATFORM_SETTINGS);
   const [platformAccounts, setPlatformAccounts] = useState<PlatformAccount[]>([]);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [adminModalFocus, setAdminModalFocus] = useState<'settings' | 'categories' | 'customers' | 'subscriptions'>('settings');
   const cloudSnapshotReady = React.useRef(false);
   const transactionCloudReady = React.useRef(false);
   const clearedLegacyCacheFor = React.useRef<string | null>(null);
@@ -1616,7 +1618,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const openHouseholdModal = () => setIsHouseholdModalOpen(true);
   const closeHouseholdModal = () => setIsHouseholdModalOpen(false);
-  const openAdminModal = () => setIsAdminModalOpen(true);
+  const openAdminModal = (focus: 'settings' | 'categories' | 'customers' | 'subscriptions' = 'settings') => {
+    setAdminModalFocus(focus);
+    setIsAdminModalOpen(true);
+  };
   const closeAdminModal = () => setIsAdminModalOpen(false);
 
   useEffect(() => {
@@ -2624,6 +2629,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         refreshPlatformAccounts,
         setPlatformAccountStatus,
         isAdminModalOpen,
+        adminModalFocus,
         openAdminModal,
         closeAdminModal,
         signInGoogle,
