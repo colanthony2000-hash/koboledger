@@ -1779,9 +1779,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         transactionCloudReady.current = true;
         clearLegacyCacheIfCloudReady(userId);
       }
-    }, (code) => {
+    }, (code, branch) => {
       setIsSyncing(false);
-      setFinanceSyncError(`Ledger read failed in Firestore (${code}). This can be a permissions, query, or index issue; it does not necessarily mean your internet is down. A read failure does not delete saved records.`);
+      setFinanceSyncError(`Ledger ${branch} records were denied by Firestore (${code}). Authorized records from the other query may still show. A read failure does not delete saved records.`);
     });
     return () => unsub();
   }, [firebaseUser, isWorkspaceReady]);

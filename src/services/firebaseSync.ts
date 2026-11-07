@@ -231,7 +231,7 @@ export function listenToRecords<T>(
   name: string,
   userId: string,
   onUpdate: (items: T[]) => void,
-  onError?: (code: string) => void,
+  onError?: (code: string, branch: 'owned' | 'shared') => void,
 ) {
   // Rules authorize owned records by owner_user_id, and household records by
   // visibility + sharedWith. Keep each query aligned with its rule branch.
@@ -252,31 +252,35 @@ export function listenToRecords<T>(
     for (const [id, record] of shared) merged.set(id, record);
     onUpdate([...merged.values()]);
   };
-  const reportError = (name: string, error: unknown) => {
+  const reportError = (name: string, error: unknown, branch: 'owned' | 'shared') => {
     const code = typeof error === 'object' && error !== null && 'code' in error
       ? String((error as { code: unknown }).code)
       : 'unknown';
-    console.error('Firestore record read failed:', name, code);
-    onError?.(code);
+    console.error('Firestore record read failed:', name, branch, code);
+    onError?.(code, branch);
   };
   const stopOwned = onSnapshot(ownedQuery, (snapshot) => {
     owned = new Map(snapshot.docs.map((item) => [item.id, item.data() as T]));
     ownedReady = true;
     publish();
   }, (error) => {
-    reportError(name, error);
+    ownedReady = true;
+    reportError(name, error, 'owned');
+    publish();
   });
   const stopShared = onSnapshot(sharedQuery, (snapshot) => {
     shared = new Map(snapshot.docs.map((item) => [item.id, item.data() as T]));
     sharedReady = true;
     publish();
   }, (error) => {
-    reportError(name, error);
+    sharedReady = true;
+    reportError(name, error, 'shared');
+    publish();
   });
   return () => { stopOwned(); stopShared(); };
 }
 
-export function listenToTransactions(userId: string, onUpdate: (txs: Transaction[]) => void, onError?: (code: string) => void) {
+export function listenToTransactions(userId: string, onUpdate: (txs: Transaction[]) => void, onError?: (code: string, branch: 'owned' | 'shared') => void) {
   return listenToRecords<Transaction>('transactions', userId, (items) => {
     items.sort((a, b) => b.effective_date.localeCompare(a.effective_date));
     onUpdate(items);
