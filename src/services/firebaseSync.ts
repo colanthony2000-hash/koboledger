@@ -231,13 +231,14 @@ export function listenToRecords<T>(
   name: string,
   userId: string,
   onUpdate: (items: T[]) => void,
-  onError?: () => void,
+  onError?: (code: string) => void,
 ) {
   // Rules authorize owned records by owner_user_id, and household records by
   // visibility + sharedWith. Keep each query aligned with its rule branch.
   const ownedQuery = query(collection(db, name), where('owner_user_id', '==', userId));
   const sharedQuery = query(
     collection(db, name),
+    where('workspace_id', '==', activeWorkspaceId || userId),
     where('visibility', '==', 'shared'),
     where('sharedWith', 'array-contains', userId),
   );
@@ -251,28 +252,31 @@ export function listenToRecords<T>(
     for (const [id, record] of shared) merged.set(id, record);
     onUpdate([...merged.values()]);
   };
-  const reportError = (name: string) => {
-    console.error('Firestore record read failed:', name);
-    onError?.();
+  const reportError = (name: string, error: unknown) => {
+    const code = typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code: unknown }).code)
+      : 'unknown';
+    console.error('Firestore record read failed:', name, code);
+    onError?.(code);
   };
   const stopOwned = onSnapshot(ownedQuery, (snapshot) => {
     owned = new Map(snapshot.docs.map((item) => [item.id, item.data() as T]));
     ownedReady = true;
     publish();
-  }, () => {
-    reportError(name);
+  }, (error) => {
+    reportError(name, error);
   });
   const stopShared = onSnapshot(sharedQuery, (snapshot) => {
     shared = new Map(snapshot.docs.map((item) => [item.id, item.data() as T]));
     sharedReady = true;
     publish();
-  }, () => {
-    reportError(name);
+  }, (error) => {
+    reportError(name, error);
   });
   return () => { stopOwned(); stopShared(); };
 }
 
-export function listenToTransactions(userId: string, onUpdate: (txs: Transaction[]) => void, onError?: () => void) {
+export function listenToTransactions(userId: string, onUpdate: (txs: Transaction[]) => void, onError?: (code: string) => void) {
   return listenToRecords<Transaction>('transactions', userId, (items) => {
     items.sort((a, b) => b.effective_date.localeCompare(a.effective_date));
     onUpdate(items);

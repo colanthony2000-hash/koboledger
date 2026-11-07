@@ -1779,9 +1779,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         transactionCloudReady.current = true;
         clearLegacyCacheIfCloudReady(userId);
       }
-    }, () => {
+    }, (code) => {
       setIsSyncing(false);
-      setFinanceSyncError('Your ledger could not be loaded from cloud storage. Your saved entries may still be there; check your connection and refresh again.');
+      setFinanceSyncError(`Ledger read failed in Firestore (${code}). This can be a permissions, query, or index issue; it does not necessarily mean your internet is down. A read failure does not delete saved records.`);
     });
     return () => unsub();
   }, [firebaseUser, isWorkspaceReady]);
@@ -2037,7 +2037,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Persist to Firestore
     persistTransaction(newTx).catch(() => {
       console.warn('Firestore transaction persist failed.');
-      setFinanceSyncError('This entry could not be confirmed in cloud storage. Keep this page open and check your connection before refreshing.');
+      setFinanceSyncError('Firestore could not confirm saving this entry. It may only be visible in this session; keep the page open and do not refresh until the save is verified.');
     });
 
     setAuditLogs((prev) => [
