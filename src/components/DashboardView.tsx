@@ -100,6 +100,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
     transactions,
     goalAllocations,
     commitments,
+    budgets,
     budgetAlerts,
     debts,
     subscription,
@@ -108,8 +109,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
   } = useFinance();
 
   const [showNetMarginLine, setShowNetMarginLine] = useState(true);
-  const [showMathProof, setShowMathProof] = useState(false);
   const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
+
+  const visibleBudgetAlerts = [...new Map(budgetAlerts.map((alert) => [alert.budget_id, alert])).values()];
+
+  const getBudgetAlertText = (alert: (typeof budgetAlerts)[number]) => {
+    const budget = budgets.find((item) => item.id === alert.budget_id);
+    if (!budget) return 'One of your spending plans is close to its limit. Open Budgets to see more.';
+
+    const spendMinor = transactions.reduce((total, transaction) => {
+      if (transaction.status !== 'posted' || !transaction.effective_date.startsWith(alert.period)) return total;
+      if (transaction.visibility === 'private' && transaction.owner_user_id !== currentUser.id) return total;
+      if (budget.exclude_project_spending && transaction.project_id) return total;
+      return total + transaction.posting_lines.reduce((lineTotal, line) =>
+        lineTotal + (line.ledger_node_id === budget.category_id && line.direction === 'debit' ? line.amount_minor : 0), 0);
+    }, 0);
+    const budgetName = budget.name.replace(/\s+Monthly Budget$/i, '').replace(/\s+Budget$/i, '');
+    const remainingMinor = Math.max(0, budget.limit_minor - spendMinor);
+    return `${budgetName}: You’ve spent ${formatMinor(spendMinor)} of ${formatMinor(budget.limit_minor)}. ${formatMinor(remainingMinor)} left this month.`;
+  };
 
   // Time-sensitive greeting
   const greeting = useMemo(() => {
@@ -222,12 +240,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
     )
     .slice(0, 6);
 
-  // Section 3 / T-05 Worked Example Account (Cash Wallet)
-  const walletAcc = visibleAccounts.find((a) => a.id === 'acc_wallet');
-  const walletBalances = walletAcc
-    ? calculateAccountBalances(walletAcc, transactions, goalAllocations, commitments)
-    : null;
-
   const getAccountBrand = (acc: any) => {
     if (acc.name.toLowerCase().includes('gtbank')) {
       return {
@@ -292,7 +304,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
               {greeting}, {currentUser.name.split(' ')[0]}
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
-              Private finance workspace for tracking accounts, budgets, goals, and transactions.
+              See what came in, what you spent, and what you have left.
             </p>
           </div>
 
@@ -302,20 +314,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
               className="px-3 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-white/10 hover:bg-white/15 rounded-xl backdrop-blur-md transition-colors border border-white/10 cursor-pointer flex items-center gap-1.5"
             >
               <Shield className="w-3.5 h-3.5 text-amber-400" />
-              <span>Role Matrix</span>
+              <span>My access</span>
             </button>
             <button
               onClick={() => setIsRecurringModalOpen(true)}
               className="px-3.5 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-white/10 hover:bg-white/15 rounded-xl backdrop-blur-md transition-colors border border-white/10 cursor-pointer flex items-center gap-1.5"
             >
               <Repeat className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Recurring</span>
+              <span>Regular payments</span>
             </button>
             <button
               onClick={() => onNavigate('ledger')}
               className="px-4 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-white/10 hover:bg-white/15 rounded-xl backdrop-blur-md transition-colors border border-white/10 cursor-pointer"
             >
-              Inspect Ledger
+              See all entries
             </button>
             {currentUser.role === 'auditor' ? (
               <button
@@ -337,27 +349,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
         </div>
       </div>
 
-      {/* Deduplicated Budget Threshold Alerts Banner */}
-      {budgetAlerts.length > 0 && (
-        <div className="relative overflow-hidden rounded-xl border border-amber-300/80 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200 dark:border-amber-700/60 shadow-xs">
+      {/* Simple budget reminders */}
+      {visibleBudgetAlerts.length > 0 && (
+        <div className="relative overflow-hidden rounded-xl border border-amber-300/80 bg-amber-50 p-4 text-amber-950 dark:bg-amber-500/10 dark:text-amber-100 dark:border-amber-700/60 shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 text-xs font-bold">
               <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>Threshold Warnings ({budgetAlerts.length} Fired · Deduplicated by Rule T-04)</span>
+              <span>{visibleBudgetAlerts.length === 1 ? 'Spending reminder' : 'Spending reminders'}</span>
             </div>
             <button
               onClick={() => onNavigate('budgets')}
               className="text-xs font-semibold text-amber-800 dark:text-amber-300 hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <span>View Allocations</span>
+              <span>View budgets</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="mt-2 space-y-1 text-xs text-amber-800 dark:text-amber-300/90 font-mono">
-            {budgetAlerts.slice(-2).map((a) => (
+          <div className="mt-2 space-y-2 text-sm leading-relaxed text-amber-900 dark:text-amber-100">
+            {visibleBudgetAlerts.slice(-2).map((a) => (
               <div key={a.id} className="flex items-start gap-2">
-                <span>›</span>
-                <span>{a.message}</span>
+                <span aria-hidden="true">•</span>
+                <span>{getBudgetAlertText(a)}</span>
               </div>
             ))}
           </div>
@@ -423,7 +435,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
           <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/10 text-xs text-emerald-200/90">
             {totalSpendableMinor < 0 ? (
               <span className="text-rose-300 font-bold">
-                Deficit of {formatMinor(Math.abs(totalSpendableMinor))} (Spendable is negative)
+                Your plans are {formatMinor(Math.abs(totalSpendableMinor))} more than the money recorded.
               </span>
             ) : (
                 <span>Money left after your plans</span>
@@ -447,32 +459,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[11px] font-bold">
                 <Crown className="w-3.5 h-3.5 text-amber-400" />
-                <span>JENECONK PRO WEALTH TOOLS</span>
+                <span>KOBOLEDGER PRO</span>
               </div>
-              <h3 className="text-xl font-extrabold tracking-tight text-white">
-                Accelerate Debt Freedom & Smart Household Budgeting
+              <h3 className="text-lg font-extrabold tracking-tight text-white">
+                Want more help with your money?
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-                Unlock these tools with KoboLedger Pro. Checkout opens securely through Paystack, and access starts only after payment is verified by JENECONK’s server.
+                Pro adds extra budget, debt and savings tools. Free tools stay available for everyday records.
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
-                <div className="flex items-center gap-1.5 text-amber-200">
-                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Unlimited Accounts</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-amber-200">
-                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>D-2 Debt Payoff Engine</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-amber-200">
-                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>4-Tier Budget Alerts</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-amber-200">
-                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Christmas 8-Section Plan</span>
-                </div>
-              </div>
             </div>
 
             <div className="shrink-0">
@@ -481,55 +475,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-extrabold text-xs shadow-lg hover:shadow-amber-500/25 transition-all cursor-pointer whitespace-nowrap"
               >
                 <Crown className="w-4 h-4" />
-                <span>Unlock Pro Features</span>
+                <span>See Pro plans</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Discreet Accounting Mathematical Verification Link */}
-      <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-        <button
-          onClick={() => setShowMathProof(!showMathProof)}
-          className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1.5 cursor-pointer font-medium transition-colors"
-        >
-          <span>{showMathProof ? 'Hide' : 'Inspect'} Double-Entry Cash Proof (Rule INV-11)</span>
-          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showMathProof ? 'rotate-90' : ''}`} />
-        </button>
-        <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-          13 Invariants Verified Balanced
-        </span>
-      </div>
-
-      {showMathProof && walletBalances && (
-        <div className="rounded-2xl border border-emerald-300/80 bg-emerald-50/40 dark:border-emerald-800/40 dark:bg-emerald-950/20 p-4 text-xs font-mono space-y-3 animate-in fade-in-50">
-          <div className="flex items-center justify-between font-bold text-slate-800 dark:text-emerald-200 border-b border-emerald-200 dark:border-emerald-800/40 pb-2">
-            <span>Cash Wallet Math Proof (T-05)</span>
-            <span>200,000 − 50,000 − 40,000 = ₦110,000.00</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
-              <span className="text-[10px] text-slate-400 block font-sans">Ledger Balance</span>
-              <span className="font-bold text-slate-900 dark:text-white">{formatMinor(walletBalances.ledgerBalanceMinor)}</span>
-            </div>
-            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
-              <span className="text-[10px] text-slate-400 block font-sans">Goal Earmarks</span>
-              <span className="font-bold text-amber-600 dark:text-amber-400">-₦50,000.00</span>
-            </div>
-            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
-              <span className="text-[10px] text-slate-400 block font-sans">Commitments</span>
-              <span className="font-bold text-amber-600 dark:text-amber-400">-₦40,000.00</span>
-            </div>
-            <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700">
-              <span className="text-[10px] text-emerald-700 dark:text-emerald-300 block font-sans font-semibold">True Spendable</span>
-              <span className="font-extrabold text-emerald-700 dark:text-emerald-300">₦110,000.00</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ALLURING MONTHLY INCOME VS EXPENDITURE TREND CHART */}
+      <details className="group rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.02]">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-slate-700 marker:hidden dark:text-slate-200">
+          <span>More details</span>
+          <span className="flex items-center gap-2 text-xs font-normal text-slate-500 dark:text-slate-400">Charts, accounts and recent activity<ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" /></span>
+        </summary>
+        <div className="mt-5 space-y-8">
+      {/* Monthly income and spending chart */}
       <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0D111C] p-6 shadow-[0_2px_16px_rgba(0,0,0,0.03)] space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -660,22 +619,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
         </div>
       </div>
 
-      {/* Accounts & Virtual Banking Cards */}
+      {/* Account balances and recent activity */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Institutional Accounts & Liquidity
+              Your accounts
             </h2>
             <p className="text-xs text-slate-500">
-              Real asset nodes reflecting posted ledger liquidity vs earmarked reserves
+              Money in each of your accounts, including bills and savings set aside.
             </p>
           </div>
           <button
             onClick={() => onNavigate('commitments')}
             className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
           >
-            <span>Commitments Register</span>
+              <span>View bills and plans</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -726,7 +685,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                     </span>
                   </div>
                   <div className="flex justify-between items-baseline border-t border-slate-100 dark:border-slate-800 pt-2">
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs">Spendable:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs">Left to use:</span>
                     <span
                       className={`font-mono font-extrabold text-sm tabular-nums ${
                         isSpendableNegative
@@ -744,7 +703,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                   {availableBalanceMinor !== null ? (
                     <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>Reconciled: <strong>{formatMinor(availableBalanceMinor)}</strong></span>
+                        <span>Last checked balance: <strong>{formatMinor(availableBalanceMinor)}</strong></span>
                     </div>
                   ) : (
                     <span className="text-slate-400 italic">Statement verification pending</span>
@@ -763,15 +722,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                Recent Ledger Postings
+                Recent entries
               </h2>
-              <span className="text-xs text-slate-400">Atomic zero-sum balanced transactions</span>
+              <span className="text-xs text-slate-400">Your latest money in and money out</span>
             </div>
             <button
               onClick={() => onNavigate('ledger')}
               className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
             >
-              Complete Ledger →
+              See all entries →
             </button>
           </div>
 
@@ -808,9 +767,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                     {tx.type === 'income' ? '+' : ''}
                     {formatMinor(tx.amount_minor, tx.currency)}
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    {tx.posting_lines.length} lines balanced
-                  </span>
+                  <span className="text-[10px] text-slate-400">{tx.type === 'income' ? 'Money received' : tx.type === 'transfer' ? 'Money moved' : 'Money spent'}</span>
                 </div>
               </div>
             ))}
@@ -822,15 +779,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                Debt Portfolio & Capacity Radar
+                Your debts
               </h2>
-              <span className="text-xs text-slate-400">D-1, D-2, and D-3 active liabilities</span>
+              <span className="text-xs text-slate-400">What you still owe</span>
             </div>
             <button
               onClick={() => onNavigate('debts')}
               className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
             >
-              Debt Engine →
+              See debts →
             </button>
           </div>
 
@@ -846,7 +803,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                   <div className="space-y-0.5">
                     <span className="font-bold text-slate-900 dark:text-white block">{d.name}</span>
                     <span className="text-slate-400 text-[11px]">
-                      {d.creditor} · {d.monthly_rate_pct}%/mo
+                      {d.creditor}
                     </span>
                   </div>
                   <div className="text-right">
@@ -862,7 +819,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                           : 'text-slate-400'
                       }`}
                     >
-                      {d.urgency_flag} Urgency
+                      {d.urgency_flag === 'high' ? 'Pay soon' : d.urgency_flag === 'medium' ? 'Keep an eye on this' : 'On track'}
                     </span>
                   </div>
                 </div>
@@ -871,22 +828,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
             <div className="p-4 rounded-xl border border-emerald-200/80 bg-emerald-50/60 dark:border-emerald-800/40 dark:bg-emerald-950/20 text-xs flex items-center justify-between gap-3">
               <div className="space-y-0.5">
                 <span className="font-bold text-emerald-900 dark:text-emerald-200 block">
-                  Verify Monthly Repayment Capacity
+                  Can you afford this repayment?
                 </span>
                 <span className="text-emerald-800/80 dark:text-emerald-300/80 text-[11px]">
-                  Runs Section 9 essential living baseline and shortfall checks
+                  Check what you can safely pay each month.
                 </span>
               </div>
               <button
                 onClick={() => onNavigate('debts')}
                 className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
               >
-                Audit Capacity
+                Check my budget
               </button>
             </div>
           </div>
         </div>
       </div>
+        </div>
+      </details>
 
       {/* Recurring Transactions Manager Modal */}
       <RecurringTransactionsModal
