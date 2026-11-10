@@ -137,9 +137,9 @@ export interface PlatformSettings {
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   plans: {
-    weekly: { amountMinor: 150000, durationDays: 7 },
-    monthly: { amountMinor: 500000, durationDays: 30 },
-    annual: { amountMinor: 5000000, durationDays: 365 },
+    weekly: { amountMinor: 70000, durationDays: 7 },
+    monthly: { amountMinor: 250000, durationDays: 30 },
+    annual: { amountMinor: 2500000, durationDays: 365 },
   },
   announcement: '',
   maintenanceMode: false,
@@ -147,7 +147,15 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
 
 export async function getPublicPlatformSettings(): Promise<PlatformSettings> {
   const call = httpsCallable<Record<string, never>, PlatformSettings>(functions, 'getPublicPlatformSettings');
-  return (await call({})).data;
+  const settings = (await call({})).data;
+  const previousDefaults = { weekly: 150000, monthly: 500000, annual: 5000000 };
+  const lowerDefaults = DEFAULT_PLATFORM_SETTINGS.plans;
+  for (const planId of Object.keys(previousDefaults) as Array<keyof typeof previousDefaults>) {
+    if (settings.plans[planId]?.amountMinor === previousDefaults[planId]) {
+      settings.plans[planId].amountMinor = lowerDefaults[planId].amountMinor;
+    }
+  }
+  return settings;
 }
 
 export async function updatePlatformSettings(settings: PlatformSettings): Promise<PlatformSettings> {

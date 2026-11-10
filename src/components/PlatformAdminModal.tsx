@@ -17,7 +17,7 @@ export const PlatformAdminModal: React.FC = () => {
   const [selectedUid, setSelectedUid] = useState('');
   const [reason, setReason] = useState('');
   const [grantDays, setGrantDays] = useState(30);
-  const [prices, setPrices] = useState({ weekly: '1500', monthly: '5000', annual: '50000' });
+  const [prices, setPrices] = useState({ weekly: '700', monthly: '2500', annual: '25000' });
   const [announcement, setAnnouncement] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [categoryName, setCategoryName] = useState('');

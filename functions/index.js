@@ -14,9 +14,9 @@ const PAYSTACK_SECRET_KEY = defineSecret('PAYSTACK_SECRET_KEY');
 const PLATFORM_ADMIN_EMAIL = 'jeneconklms@gmail.com';
 
 const PLAN_DEFAULTS = Object.freeze({
-  weekly: { amountMinor: 150000, durationDays: 7 },
-  monthly: { amountMinor: 500000, durationDays: 30 },
-  annual: { amountMinor: 5000000, durationDays: 365 },
+  weekly: { amountMinor: 70000, durationDays: 7 },
+  monthly: { amountMinor: 250000, durationDays: 30 },
+  annual: { amountMinor: 2500000, durationDays: 365 },
 });
 const DEFAULT_CATEGORIES = [
   { id: 'cat_food', name: 'Staple Foods & Groceries', type: 'expense', is_essential: true, color: '#16A34A' },
@@ -87,7 +87,9 @@ async function getPlatformSettings() {
   const saved = snapshot.exists ? snapshot.data() : {};
   return {
     plans: Object.fromEntries(Object.entries(PLAN_DEFAULTS).map(([id, defaults]) => [id, {
-      amountMinor: Number(saved.plans?.[id]?.amountMinor) || defaults.amountMinor,
+      amountMinor: Number(saved.plans?.[id]?.amountMinor) === ({ weekly: 150000, monthly: 500000, annual: 5000000 }[id])
+        ? defaults.amountMinor
+        : (Number(saved.plans?.[id]?.amountMinor) || defaults.amountMinor),
       durationDays: defaults.durationDays,
     }])),
     announcement: typeof saved.announcement === 'string' ? saved.announcement : '',

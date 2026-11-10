@@ -80,11 +80,11 @@ export const Header: React.FC<HeaderProps> = ({
 
   const navLinks = [
     { id: 'dashboard', label: 'Overview' },
-    { id: 'ledger', label: 'Ledger' },
-    { id: 'budgets', label: 'Budgets & Vaults' },
-    { id: 'debts', label: 'Debt Payoff' },
-    { id: 'projects', label: 'Christmas Plan' },
-    { id: 'commitments', label: 'Commitments' },
+    { id: 'ledger', label: 'Entries' },
+    { id: 'budgets', label: 'Budgets' },
+    { id: 'debts', label: 'Debt' },
+    { id: 'projects', label: 'Savings plan' },
+    { id: 'commitments', label: 'Bills & plans' },
     { id: 'todos', label: 'To‑Do' },
     ...(isPlatformAdmin ? [{ id: 'owner-settings', label: 'Owner Settings' }] : []),
   ];
@@ -298,7 +298,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer active:scale-95 whitespace-nowrap"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Quick Add</span>
+              <span className="hidden sm:inline">Add entry</span>
             </button>
           )}
         </div>
@@ -308,7 +308,7 @@ export const Header: React.FC<HeaderProps> = ({
           {currentUser.role === 'auditor' ? (
             <button onClick={() => openUserProfileModal(currentUser)} aria-label="Open read-only audit profile" className="flex h-10 w-10 items-center justify-center rounded-xl border border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300"><Lock className="h-4 w-4"/></button>
           ) : (
-            <button onClick={onOpenQuickAdd} aria-label="Quick add transaction" title="Quick add transaction" className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"><Plus className="h-5 w-5"/></button>
+            <button onClick={onOpenQuickAdd} aria-label="Add entry" title="Add entry" className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"><Plus className="h-5 w-5"/></button>
           )}
           <button
             type="button"

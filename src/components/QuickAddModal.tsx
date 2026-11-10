@@ -1,14 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { parseQuickAddInput, ParsedDraft } from '../services/quickAddParser';
-import { formatMinor } from '../services/ledgerEngine';
 import {
   X,
-  Sparkles,
   Check,
   HelpCircle,
   ArrowRight,
-  ShieldCheck,
   Zap,
   ArrowDownLeft,
   ArrowUpRight,
@@ -17,8 +14,24 @@ import {
   Building,
   Tag,
   Hash,
+  Mic,
+  MicOff,
 } from 'lucide-react';
 import { AccountType, TransactionType } from '../types/finance';
+
+type SpeechResultEvent = Event & { results: ArrayLike<ArrayLike<{ transcript: string }>> };
+type SpeechErrorEvent = Event & { error: string };
+interface SpeechRecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  onresult: ((event: SpeechResultEvent) => void) | null;
+  onerror: ((event: SpeechErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+type SpeechWindow = Window & { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -28,13 +41,13 @@ interface QuickAddModalProps {
 export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose }) => {
   const { accounts, categories, postTransaction, currentUser, addAccount, firebaseUser, activeWorkspace } = useFinance();
 
-  const [inputVal, setInputVal] = useState('Transport to Aba 3000');
+  const [inputVal, setInputVal] = useState('');
   const [draft, setDraft] = useState<ParsedDraft | null>(null);
 
   // Editable fields on review card
   const [confirmedType, setConfirmedType] = useState<TransactionType>('expense');
-  const [confirmedAmountNaira, setConfirmedAmountNaira] = useState<number>(3000);
-  const [confirmedDescription, setConfirmedDescription] = useState('Transport to Aba');
+  const [confirmedAmountNaira, setConfirmedAmountNaira] = useState<number>(0);
+  const [confirmedDescription, setConfirmedDescription] = useState('');
   const [confirmedDate, setConfirmedDate] = useState(new Date().toISOString().split('T')[0]);
   const [confirmedAccountId, setConfirmedAccountId] = useState<string>('');
   const [confirmedCategoryId, setConfirmedCategoryId] = useState<string>('');
@@ -46,9 +59,9 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
   const [newAccountShared, setNewAccountShared] = useState(false);
   const [shareTransactionWithHousehold, setShareTransactionWithHousehold] = useState(false);
   const [accountError, setAccountError] = useState('');
-
-  // Optional LLM fallback state
-  const [enableLLMFallback, setEnableLLMFallback] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [speechMessage, setSpeechMessage] = useState('');
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   // Ambiguity selection
   const [selectedAmbiguityIndex, setSelectedAmbiguityIndex] = useState<number | null>(null);
@@ -81,6 +94,31 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
     setInputVal(phrase);
   };
 
+  const handleSpeak = () => {
+    const speechWindow = window as SpeechWindow;
+    const SpeechRecognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpeechMessage('Voice entry is not available in this browser. You can type the entry instead.');
+      return;
+    }
+    setSpeechMessage('');
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-NG';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim();
+      if (transcript) setInputVal(transcript);
+    };
+    recognition.onerror = (event) => {
+      setSpeechMessage(event.error === 'not-allowed' ? 'Microphone access is blocked. Allow it in your browser settings or type the entry.' : 'We could not hear that clearly. Try again or type the entry.');
+    };
+    recognition.onend = () => { setIsListening(false); recognitionRef.current = null; };
+    recognitionRef.current = recognition;
+    setIsListening(true);
+    try { recognition.start(); } catch { setIsListening(false); setSpeechMessage('Voice entry could not start. Please type the entry instead.'); }
+  };
+
   const handleAmbiguitySelect = (idx: number) => {
     setSelectedAmbiguityIndex(idx);
     if (draft?.ambiguityOptions && draft.ambiguityOptions[idx]) {
@@ -97,6 +135,10 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
 
   const handleConfirmAndPost = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!draft) {
+      alert('Type or speak what happened, then check the entry before saving.');
+      return;
+    }
     if (!accounts.length) {
       setIsAddingAccount(true);
       setAccountError('Create an account before posting this entry.');
@@ -166,10 +208,6 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
     setAccountError('');
   };
 
-  const currentAccount = accounts.find((a) => a.id === confirmedAccountId);
-  const currentCategory = categories.find((c) => c.id === confirmedCategoryId);
-  const destinationAccount = accounts.find((a) => a.id === confirmedDestinationAccountId);
-
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 sm:items-center sm:p-6 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
       <div className="relative my-auto w-full max-w-2xl max-h-[calc(100dvh-1rem)] bg-white dark:bg-[#0E131F] rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 sm:max-h-[calc(100dvh-3rem)]">
@@ -185,13 +223,13 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
             </div>
             <div>
               <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Deterministic Quick Add</span>
+                <span>Add an entry</span>
                 <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                  Nigerian Phrasing
+                  Quick entry
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Blueprint Section 10 · Draft Review Mandatory · Zero Silent Posts
+                Say or type what happened. Check it before saving.
               </p>
             </div>
           </div>
@@ -209,9 +247,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400">
-                Nigerian Everyday Phrases (Click to test)
+                Try an example
               </label>
-              <span className="text-[11px] text-slate-400">Section 10.2</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {[
@@ -244,20 +281,23 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
           {/* Natural Text Input */}
           <div>
             <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
-              Type or speak natural expense in Naira
+              What happened? You can type or speak.
             </label>
             <div className="relative">
               <input
                 type="text"
                 value={inputVal}
                 onChange={(e) => setInputVal(e.target.value)}
-                placeholder="e.g. Transport to Aba 3000, Sent Mum 15k, Paid light bill 20000"
+                placeholder="For example: I spent 3,000 on transport"
                 className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.04] px-4 py-3 text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white dark:focus:bg-[#0E131F] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
               />
-              <div className="absolute right-3 top-3 px-2 py-0.5 rounded text-[10px] font-mono font-medium text-slate-400 bg-slate-100 dark:bg-white/10">
-                ENTER
-              </div>
+              <button type="button" onClick={isListening ? () => recognitionRef.current?.stop() : handleSpeak} className="absolute right-2 top-2 inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white hover:bg-emerald-700" aria-label={isListening ? 'Stop speaking' : 'Speak your entry'}>
+                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}{isListening ? 'Stop' : 'Speak'}
+              </button>
             </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Voice availability depends on your browser. Your browser may send audio to its speech service; KoboLedger does not save the audio. You will review the words before saving.</p>
+            {isListening && <p role="status" className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300">Listening… speak now.</p>}
+            {speechMessage && <p role="status" className="mt-2 text-sm text-amber-700 dark:text-amber-300">{speechMessage}</p>}
           </div>
 
           {/* Ambiguity Resolution Alert (Section 10.4) */}
@@ -293,30 +333,6 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
             </div>
           )}
 
-          {/* Parser Confidence Strip */}
-          {draft && (
-            <div className="flex items-center justify-between text-xs px-3.5 py-2.5 bg-slate-50 dark:bg-white/[0.03] rounded-xl border border-slate-200/80 dark:border-white/5 text-slate-600 dark:text-slate-400">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-slate-400">Amount Match:</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">
-                    {Math.round(draft.confidence.amount * 100)}%
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-slate-400">Category:</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">
-                    {Math.round(draft.confidence.category * 100)}%
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Deterministic Grammar Match</span>
-              </div>
-            </div>
-          )}
-
           {/* Mandatory Review Card (Section 10.5) */}
           <form onSubmit={handleConfirmAndPost} className="space-y-4 pt-1">
             <div className="border border-slate-200/80 dark:border-white/10 rounded-2xl p-5 space-y-4 bg-slate-50/60 dark:bg-white/[0.02]">
@@ -324,11 +340,11 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                    Review Posting Draft Before Commitment
+                    Check this entry
                   </h3>
                 </div>
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-200/60 dark:bg-white/10 text-slate-700 dark:text-slate-300">
-                  DRAFT · UNPOSTED
+                  Not saved yet
                 </span>
               </div>
 
@@ -336,23 +352,23 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
                 {/* Movement Type */}
                 <div>
                   <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                    Movement Type
+                    Entry type
                   </label>
                   <select
                     value={confirmedType}
                     onChange={(e) => setConfirmedType(e.target.value as TransactionType)}
                     className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#131926] p-2.5 text-base sm:text-sm text-slate-900 dark:text-white font-medium focus:border-emerald-500 focus:outline-none"
                   >
-                    <option value="expense">Expense (Spend)</option>
-                    <option value="income">Income (Earnings)</option>
-                    <option value="transfer">Transfer (Between Own Accounts)</option>
+                    <option value="expense">Money spent</option>
+                    <option value="income">Money received</option>
+                    <option value="transfer">Move money between my accounts</option>
                   </select>
                 </div>
 
                 {/* Amount in Naira */}
                 <div>
                   <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                    Amount (₦ NGN)
+                    Amount
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-2.5 text-slate-400 font-mono font-bold">₦</span>
@@ -371,7 +387,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
                 {/* Description */}
                 <div>
                   <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                    Description
+                    What was it for?
                   </label>
                   <input
                     type="text"
@@ -385,7 +401,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
                 {/* Effective Date (INV-08 Backdating) */}
                 <div>
                   <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                    Effective Date (INV-08)
+                    Date
                   </label>
                   <input
                     type="date"
@@ -399,7 +415,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
                 {/* Account */}
                 <div>
                   <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                    {confirmedType === 'transfer' ? 'Source Account' : 'Account'}
+                    {confirmedType === 'transfer' ? 'Money from' : 'Money came from'}
                   </label>
                   {accounts.length > 0 ? <select
                     value={confirmedAccountId}
@@ -407,7 +423,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
                     className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#131926] p-2.5 text-base sm:text-sm text-slate-900 dark:text-white font-medium focus:border-emerald-500 focus:outline-none"
                     required
                   >
-                    <option value="">Select Account</option>
+                    <option value="">Choose an account</option>
                     {accounts.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name} ({a.type})
@@ -435,7 +451,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
                 {confirmedType !== 'transfer' ? (
                   <div>
                     <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                      Ledger Category
+                      What was it for?
                     </label>
                     <select
                       value={confirmedCategoryId}
@@ -443,7 +459,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
                       className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#131926] p-2.5 text-base sm:text-sm text-slate-900 dark:text-white font-medium focus:border-emerald-500 focus:outline-none"
                       required
                     >
-                      <option value="">Select Category</option>
+                      <option value="">Choose a category</option>
                       {categories
                         .filter((c) =>
                           confirmedType === 'income' ? c.type === 'income' : c.type === 'expense'
@@ -479,116 +495,10 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
                 )}
               </div>
 
-              {/* Posting Lines Double-Entry Preview Card */}
-              <div className="border-t border-slate-200/80 dark:border-white/10 pt-3.5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                    Double-Entry Ledger Impact (Zero-Sum Invariant INV-13)
-                  </span>
-                  <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                    Net: ₦0.00
-                  </span>
-                </div>
-                
-                <div className="text-xs font-mono space-y-1.5 bg-white dark:bg-[#080B11] p-3 rounded-xl border border-slate-200/80 dark:border-white/5">
-                  {confirmedType === 'expense' && (
-                    <>
-                      <div className="flex justify-between items-center py-0.5">
-                        <span className="text-slate-700 dark:text-slate-300">
-                          DEBIT Category ({currentCategory?.name || 'Selected Category'})
-                        </span>
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">
-                          +{formatMinor(confirmedAmountNaira * 100)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center py-0.5">
-                        <span className="text-slate-700 dark:text-slate-300">
-                          CREDIT Account ({currentAccount?.name || 'Selected Account'})
-                        </span>
-                        <span className="text-rose-600 dark:text-rose-400 font-bold tabular-nums">
-                          -{formatMinor(confirmedAmountNaira * 100)}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                  {confirmedType === 'income' && (
-                    <>
-                      <div className="flex justify-between items-center py-0.5">
-                        <span className="text-slate-700 dark:text-slate-300">
-                          DEBIT Account ({currentAccount?.name || 'Selected Account'})
-                        </span>
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">
-                          +{formatMinor(confirmedAmountNaira * 100)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center py-0.5">
-                        <span className="text-slate-700 dark:text-slate-300">
-                          CREDIT Category ({currentCategory?.name || 'Income Category'})
-                        </span>
-                        <span className="text-slate-500 font-bold tabular-nums">
-                          +{formatMinor(confirmedAmountNaira * 100)}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                  {confirmedType === 'transfer' && (
-                    <>
-                      <div className="flex justify-between items-center py-0.5">
-                        <span className="text-slate-700 dark:text-slate-300">
-                          DEBIT Destination ({destinationAccount?.name || 'Dest Account'})
-                        </span>
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">
-                          +{formatMinor(confirmedAmountNaira * 100)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center py-0.5">
-                        <span className="text-slate-700 dark:text-slate-300">
-                          CREDIT Source ({currentAccount?.name || 'Source Account'})
-                        </span>
-                        <span className="text-rose-600 dark:text-rose-400 font-bold tabular-nums">
-                          -{formatMinor(confirmedAmountNaira * 100)}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-400 italic pt-1 font-sans">
-                        INV-02: Transfer between own accounts leaves income and expense totals unchanged.
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
               {firebaseUser && activeWorkspace && <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 dark:border-white/10 dark:text-slate-300">
                 <input type="checkbox" checked={shareTransactionWithHousehold} onChange={(event) => setShareTransactionWithHousehold(event.target.checked)} className="h-4 w-4 accent-emerald-600" />
                 Share this transaction with household members
               </label>}
-            </div>
-
-            {/* Optional LLM Fallback Section (Section 10.6) */}
-            <div className="border border-slate-200/80 dark:border-white/10 rounded-2xl p-4 bg-slate-50/50 dark:bg-white/[0.02]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-900 dark:text-white block">
-                      Optional Gemini AI Assistant
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      Off by default · Privacy-preserving raw text only
-                    </span>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={enableLLMFallback}
-                    onChange={(e) => setEnableLLMFallback(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-slate-200 dark:bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-                </label>
-              </div>
             </div>
 
             {/* Modal Actions */}
@@ -606,7 +516,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ isOpen, onClose })
                 className="flex min-h-11 items-center justify-center gap-2 px-6 py-2.5 text-sm sm:text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl shadow-lg shadow-emerald-600/20 cursor-pointer transition-all transform active:scale-98 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Check className="w-4 h-4" />
-                <span>{accounts.length ? 'Confirm & Post to Ledger (T-01)' : 'Add an account to continue'}</span>
+                <span>{accounts.length ? 'Save entry' : 'Add an account to continue'}</span>
               </button>
             </div>
           </form>

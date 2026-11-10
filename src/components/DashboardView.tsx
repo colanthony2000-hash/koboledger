@@ -330,7 +330,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                 onClick={onOpenQuickAdd}
                 className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-900 bg-white hover:bg-slate-100 rounded-xl shadow-[0_4px_16px_rgba(255,255,255,0.2)] transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               >
-                <span>+ Quick Entry</span>
+                <span>+ Add entry</span>
               </button>
             )}
           </div>
@@ -369,16 +369,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
         {/* Card 1: Total Ledger Liquidity */}
         <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-[#0D111C] p-6 border border-slate-200/80 dark:border-slate-800/80 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-md transition-shadow group">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
-            <span className="font-semibold uppercase tracking-wider text-[11px]">Ledger Cash Balance</span>
+            <span className="font-semibold uppercase tracking-wider text-[11px]">Money in your accounts</span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800">
-              {visibleAccounts.length} Accounts
+              {visibleAccounts.length} accounts
             </span>
           </div>
           <div className="text-3xl lg:text-4xl font-extrabold font-mono tabular-nums text-slate-900 dark:text-white mt-1">
             {formatMinor(totalLedgerMinor)}
           </div>
           <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/80 text-xs text-slate-500">
-            <span>Posted double-entry cash</span>
+            <span>Total money recorded</span>
             <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
               <span>Balanced</span>
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -389,17 +389,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
         {/* Card 2: Total Reserved Obligations */}
         <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-[#0D111C] p-6 border border-amber-200/70 dark:border-amber-900/40 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-md transition-shadow group">
           <div className="flex items-center justify-between text-xs text-amber-700 dark:text-amber-400 mb-2">
-            <span className="font-semibold uppercase tracking-wider text-[11px]">Total Reserved</span>
+            <span className="font-semibold uppercase tracking-wider text-[11px]">Set aside for later</span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800">
-              Earmarks & Obligations
+              Bills and plans
             </span>
           </div>
           <div className="text-3xl lg:text-4xl font-extrabold font-mono tabular-nums text-amber-600 dark:text-amber-400 mt-1">
             {formatMinor(totalReservedMinor)}
           </div>
           <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/80 text-xs text-slate-500">
-            <span>Virtual Goals + Commitments</span>
-            <span className="font-medium text-slate-700 dark:text-slate-300">Deducted from spendable</span>
+            <span>Savings goals and bills</span>
+            <span className="font-medium text-slate-700 dark:text-slate-300">Already set aside</span>
           </div>
         </div>
 
@@ -411,10 +411,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
         }`}>
           <div className="flex items-center justify-between text-xs mb-2">
             <span className="font-bold uppercase tracking-wider text-[11px] text-emerald-400">
-              Safe Spendable Balance
+              Free to use
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-white/90">
-              Ledger − Reserved
+              After bills and savings
             </span>
           </div>
           <div className="text-3xl lg:text-4xl font-extrabold font-mono tabular-nums text-white mt-1">
@@ -426,7 +426,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                 Deficit of {formatMinor(Math.abs(totalSpendableMinor))} (Spendable is negative)
               </span>
             ) : (
-              <span>Verified uncommitted cash available right now</span>
+                <span>Money left after your plans</span>
             )}
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
           </div>
@@ -538,11 +538,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
                 <TrendingUp className="w-4 h-4" />
               </div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                Monthly Inflows vs. Consumption Trends
+                Money in and money out
               </h2>
             </div>
             <p className="text-xs text-slate-500">
-              Double-entry operational ledger curves across the previous 6 reporting months
+              See how much came in and went out over the last 6 months.
             </p>
           </div>
 
@@ -550,13 +550,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-4 text-xs font-mono bg-slate-50 dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
               <div>
-                <span className="text-[10px] text-slate-400 block font-sans">Total Inflow</span>
+                <span className="text-[10px] text-slate-400 block font-sans">Money in</span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
                   ₦{(total6mIncome / 1000).toFixed(0)}k
                 </span>
               </div>
               <div className="border-l border-slate-200 dark:border-slate-700 pl-3">
-                <span className="text-[10px] text-slate-400 block font-sans">Total Spend</span>
+                <span className="text-[10px] text-slate-400 block font-sans">Money out</span>
                 <span className="font-bold text-rose-600 dark:text-rose-400 tabular-nums">
                   ₦{(total6mExpenditure / 1000).toFixed(0)}k
                 </span>

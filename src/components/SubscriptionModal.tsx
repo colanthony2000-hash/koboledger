@@ -70,9 +70,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
         {/* Content Area */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
-          <p className="text-sm text-slate-600 dark:text-slate-300">{activeFeatureRequested ? `Unlock ${activeFeatureRequested} and more with KoboLedger Pro.` : 'Choose a plan to unlock the full KoboLedger experience.'} Payment is securely verified before Pro access is enabled.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300">{activeFeatureRequested ? `Get ${activeFeatureRequested} and more with KoboLedger Pro.` : 'Choose a KoboLedger Pro plan for more tools.'} Keep using the free plan for your everyday records.</p>
           {!firebaseUser && <div className="p-3 rounded-xl border border-blue-500/30 bg-blue-500/10 text-sm text-blue-900 dark:text-blue-200">Sign in or create a KoboLedger account before purchasing so your plan is attached to your account.</div>}
-          {!secureCheckoutReady && <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-sm text-amber-900 dark:text-amber-200">Secure checkout is not activated yet. Your plan options are shown, but payment will open after JENECONK finishes connecting Paystack.</div>}
+          {!secureCheckoutReady && <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-sm text-amber-900 dark:text-amber-200">Pro prices are shown below. Payment is not available yet, so you cannot be charged from this screen.</div>}
           {checkoutError && <div role="alert" className="p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-700 dark:text-rose-300">{checkoutError}</div>}
           <div className="grid gap-3 sm:grid-cols-3">
             {[
@@ -91,7 +91,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               </button>
             </div>)}
           </div>
-          <p className="text-xs text-slate-500">You’ll complete payment on Paystack. KoboLedger activates your subscription only after the server confirms payment.</p>
+          <p className="text-xs text-slate-500">Free to start. You can upgrade when paid plans are ready.</p>
         </div>
       </div>
     </div>
