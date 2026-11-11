@@ -37,6 +37,7 @@ import {
 import { DailySavingsCard } from './DailySavingsCard';
 import { FinancialHealthScoreCard } from './FinancialHealthScoreCard';
 import { RecurringTransactionsModal } from './RecurringTransactionsModal';
+import { TodayTodoCard } from './TodayTodoCard';
 
 interface DashboardViewProps {
   onOpenQuickAdd: () => void;
@@ -348,6 +349,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenQuickAdd, on
           </div>
         </div>
       </div>
+
+      <TodayTodoCard onOpenTasks={() => onNavigate('todos')} />
 
       {/* Simple budget reminders */}
       {visibleBudgetAlerts.length > 0 && (

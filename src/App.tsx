@@ -23,24 +23,58 @@ function TodoReminderAgent() {
 
   useEffect(() => {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || localStorage.getItem('kl_todo_notifications_enabled') !== 'true') return;
-    const checkReminders = () => {
+    const checkReminders = async () => {
       const now = Date.now();
       for (const task of todoItems) {
-        if (task.completed || !task.reminderAt || new Date(task.reminderAt).getTime() > now) continue;
-        const key = `kl_todo_reminded_${task.id}_${task.reminderAt}`;
-        if (localStorage.getItem(key)) continue;
-        localStorage.setItem(key, 'true');
-        const title = 'KoboLedger task reminder';
-        const options: NotificationOptions = { body: task.title, tag: key, icon: '/icons/koboledger-192.png' };
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.ready.then((registration) => registration.showNotification(title, options))
-            .catch(() => new Notification(title, options));
-        } else new Notification(title, options);
+        if (task.completed) continue;
+
+        const alarms = task.dueAt
+          ? [
+            { offset: 30 * 60_000, label: '30-minute' },
+            { offset: 10 * 60_000, label: '10-minute' },
+          ].map((alarm) => ({ ...alarm, at: new Date(task.dueAt as string).getTime() - alarm.offset }))
+            .concat(task.reminderAt ? [{ offset: 0, label: 'extra', at: new Date(task.reminderAt).getTime() }] : [])
+          : task.reminderAt ? [{ offset: 0, label: 'task', at: new Date(task.reminderAt).getTime() }] : [];
+
+        for (const alarm of alarms) {
+          // A short grace period catches the alarm if the browser briefly throttles its timer.
+          if (!Number.isFinite(alarm.at) || now < alarm.at || now - alarm.at > 5 * 60_000) continue;
+          const scheduleKey = task.dueAt || task.reminderAt;
+          const key = `kl_todo_reminded_${task.id}_${scheduleKey}_${alarm.label}`;
+          if (localStorage.getItem(key)) continue;
+          localStorage.setItem(key, 'true');
+          const dueTime = task.dueAt ? new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(task.dueAt)) : '';
+          const title = alarm.label === '30-minute' || alarm.label === '10-minute' ? `${alarm.label} task reminder` : 'Task reminder';
+          const options: NotificationOptions & { vibrate: number[] } = {
+            body: dueTime ? `${task.title} — scheduled for ${dueTime}.` : task.title,
+            tag: key,
+            requireInteraction: true,
+            vibrate: [300, 120, 300, 120, 500],
+            icon: '/icons/koboledger-192.png',
+            badge: '/icons/koboledger-192.png',
+            data: { url: '/#todos' },
+          };
+          try {
+            if ('serviceWorker' in navigator) {
+              const registration = await navigator.serviceWorker.ready;
+              await registration.showNotification(title, options);
+            } else new Notification(title, options);
+          } catch {
+            localStorage.removeItem(key);
+          }
+        }
       }
     };
     checkReminders();
-    const timer = window.setInterval(checkReminders, 30_000);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(() => { void checkReminders(); }, 15_000);
+    const onReturn = () => { if (document.visibilityState === 'visible') void checkReminders(); };
+    document.addEventListener('visibilitychange', onReturn);
+    window.addEventListener('focus', onReturn);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onReturn);
+      window.removeEventListener('focus', onReturn);
+    };
   }, [todoItems]);
 
   return null;

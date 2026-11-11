@@ -32,7 +32,9 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+    const target = event.notification.data && event.notification.data.url ? event.notification.data.url : '/';
     const existing = windows.find((client) => 'focus' in client);
-    return existing ? existing.focus() : self.clients.openWindow('/');
+    if (!existing) return self.clients.openWindow(target);
+    return existing.navigate(target).then(() => existing.focus());
   }));
 });
